@@ -130,9 +130,9 @@ int main(int argc , char *argv[])
 			buffer[valread] = '\0';
 			send(socketFD, buffer , strlen(buffer) , 0);
 
-			/*if (strncmp(buffer, "#quit", 5) == 0) {
+			if (strncmp(buffer, "#quit", 5) == 0) {
 				exit(EXIT_SUCCESS);
-			}*/
+			}
 		}
 	}
 

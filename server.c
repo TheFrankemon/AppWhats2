@@ -76,6 +76,53 @@ int pushClient(client** list, client** elem) {
     return 1;
 }
 
+void disconnectClient(client** connectedClients, int sd) {
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    getpeername(sd , (struct sockaddr*) &address , (socklen_t*) &addrlen);
+    printf("Host disconnected , ip %s , port %d \n" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
+      
+    //Close the socket and mark as 0 in list for reuse
+    close(sd);
+    //client_socket[i] = 0;
+    removeClient(connectedClients, sd);
+}
+
+int sendMessageTo(client* list, char* buffer, int fd) {
+    client* tmp = list;
+
+    if (tmp == NULL) {
+        return 0;
+    }
+
+    for (; tmp != NULL; ) {
+        if (tmp -> socketFD == fd) {
+            send(tmp -> socketFD, buffer, strlen(buffer), 0);
+            return 1;
+        }
+        tmp = (client*)(tmp->next);
+    }
+
+    return 0;
+}
+
+int sendMessageToAllExcept(client* list, char* buffer, int fd) {
+    client* tmp = list;
+
+    if (tmp == NULL) {
+        return 0;
+    }
+
+    for (; tmp != NULL; ) {
+        if (tmp -> socketFD != fd) {
+            send(tmp -> socketFD, buffer, strlen(buffer), 0);
+        }
+        tmp = (client*)(tmp->next);
+    }
+
+    return 1;
+}
+
 int sendMessageToAll(client* list, char* buffer) {
     client* tmp = list;
 
@@ -236,19 +283,29 @@ int main(int argc , char *argv[]) {
                 //Check if it was for closing , and also read the incoming message
                 if ((valread = read( sd , buffer, 1024)) == 0) {
                     //Somebody disconnected , get his details and print
-                    getpeername(sd , (struct sockaddr*)&address , (socklen_t*)&addrlen);
+                    /*getpeername(sd , (struct sockaddr*)&address , (socklen_t*)&addrlen);
                     printf("Host disconnected , ip %s , port %d \n" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
                       
                     //Close the socket and mark as 0 in list for reuse
-                    close( sd );
+                    close(sd);
                     //client_socket[i] = 0;
-                    removeClient(&connectedClients, sd);
-                    printf("Removed client %d\n", sd);
+                    removeClient(&connectedClients, sd);*/
+                    disconnectClient(&connectedClients, sd);
+                    sprintf(buffer, "%d lost connection.", sd);
+                    sendMessageToAll(connectedClients, buffer);
                 } else { //Echo back the message that came in
                     //set the string terminating NULL byte on the end of the data read
                     buffer[valread] = '\0';
                     //send(sd , buffer , strlen(buffer) , 0 );
-                    sendMessageToAll(connectedClients, buffer);
+                    if (strncmp(buffer, "#quit", 5) == 0) {
+                        /*close(sd);
+                        removeClient(&connectedClients, sd);*/
+                        disconnectClient(&connectedClients, sd);
+                        sprintf(buffer, "%d quit.", sd);
+                        sendMessageToAll(connectedClients, buffer);
+                    } else {
+                        sendMessageToAll(connectedClients, buffer);
+                    }
                 }
             }
             tmp = (client*) tmp -> next;
