@@ -86,6 +86,8 @@ int main(int argc , char *argv[])
 
 	printf("Connecting to %s:%d\n", serverIP, serverPort);
 
+	send(socketFD, argv[3] , strlen(argv[3]) , 0);
+
 	/*struct client cData;
 	strcpy(cData.nick, argv[3]);
 	cData.sockAddr = stSockAddr;
@@ -121,7 +123,12 @@ int main(int argc , char *argv[])
 		if (FD_ISSET(socketFD, &readfds)) {
 			valread = read(socketFD, buffer, 1024);
 			buffer[valread] = '\0';
-			printf("%s\n", buffer);
+			//printf("Msg: %s\n----------------------\n", buffer);
+			if (valread == 0) {
+				exit(EXIT_SUCCESS);
+			} else {
+				printf("%s\n", buffer);
+			}
 		}
 		
 		//STDIN activity
@@ -130,9 +137,9 @@ int main(int argc , char *argv[])
 			buffer[valread] = '\0';
 			send(socketFD, buffer , strlen(buffer) , 0);
 
-			if (strncmp(buffer, "#quit", 5) == 0) {
+			/*if (strncmp(buffer, "#quit", 5) == 0) {
 				exit(EXIT_SUCCESS);
-			}
+			}*/
 		}
 	}
 

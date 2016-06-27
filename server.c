@@ -21,6 +21,7 @@ typedef struct {
   //struct sockaddr_in sockAddr;
   int socketFD;
   struct client * next;
+  int firstMsg;
 } client;
 
 int removeClient(client** list, int fd) {
@@ -88,22 +89,23 @@ void disconnectClient(client** connectedClients, int sd) {
     removeClient(connectedClients, sd);
 }
 
-int sendMessageTo(client* list, char* buffer, int fd) {
+int checkNickname(client* list, client* newClient) {
     client* tmp = list;
-
-    if (tmp == NULL) {
-        return 0;
-    }
-
     for (; tmp != NULL; ) {
-        if (tmp -> socketFD == fd) {
-            send(tmp -> socketFD, buffer, strlen(buffer), 0);
-            return 1;
+        printf("%s = %s\n", tmp -> nick, newClient -> nick);
+        if (tmp -> socketFD != newClient -> socketFD &&
+            strcmp(tmp -> nick, newClient -> nick) == 0) {
+            return 0;
         }
         tmp = (client*)(tmp->next);
     }
+    return 1;
+}
 
-    return 0;
+int sendMessageTo(int fd, char* buffer) {
+    send(fd, buffer, strlen(buffer), 0);
+
+    return 1;
 }
 
 int sendMessageToAllExcept(client* list, char* buffer, int fd) {
@@ -257,8 +259,6 @@ int main(int argc , char *argv[]) {
             }
               
             puts("Welcome message sent successfully");
-            sprintf(buffer, "@%d has joined the chat", sd);
-            sendMessageToAll(connectedClients, buffer);
               
             //add new socket to array of sockets
             /*for (i = 0; i < max_clients; i++) {
@@ -273,6 +273,7 @@ int main(int argc , char *argv[]) {
             client* newClient = (client*) malloc(sizeof(client));
             newClient -> socketFD = new_socket;
             newClient -> next = NULL;
+            newClient -> firstMsg = 1;
             pushClient(&connectedClients, &newClient);
         }
           
@@ -293,20 +294,34 @@ int main(int argc , char *argv[]) {
                     //client_socket[i] = 0;
                     removeClient(&connectedClients, sd);*/
                     disconnectClient(&connectedClients, sd);
-                    sprintf(buffer, "@%d lost connection", sd);
+                    sprintf(buffer, "@%s lost connection", tmp -> nick);
                     sendMessageToAll(connectedClients, buffer);
                 } else { //Echo back the message that came in
                     //set the string terminating NULL byte on the end of the data read
                     buffer[valread] = '\0';
                     //send(sd , buffer , strlen(buffer) , 0 );
-                    if (strncmp(buffer, "#quit", 5) == 0) {
-                        /*close(sd);
-                        removeClient(&connectedClients, sd);*/
-                        disconnectClient(&connectedClients, sd);
-                        sprintf(buffer, "@%d hast left the chat", sd);
-                        sendMessageToAll(connectedClients, buffer);
+                    if (tmp -> firstMsg) {
+                        strcpy(tmp -> nick, buffer);
+                        tmp -> firstMsg = 0;
+                        if (checkNickname(connectedClients, tmp)) {
+                            sprintf(buffer, "@%s has joined the chat", tmp -> nick);
+                            sendMessageToAllExcept(connectedClients, buffer, sd);
+                        } else {
+                            sprintf(buffer, "Sorry '%s' is already connected, please change nickname and retry...", tmp -> nick);
+                            sendMessageTo(sd, buffer);
+                            //sprintf(buffer, "Sorry '%s' is already connected, please change nickname and retry...", buffer);
+                            disconnectClient(&connectedClients, sd);
+                        }                        
                     } else {
-                        sendMessageToAll(connectedClients, buffer);
+                        if (strncmp(buffer, "#quit", 5) == 0) {
+                            /*close(sd);
+                            removeClient(&connectedClients, sd);*/
+                            disconnectClient(&connectedClients, sd);
+                            sprintf(buffer, "@%s hast left the chat", tmp -> nick);
+                            sendMessageToAll(connectedClients, buffer);
+                        } else {
+                            sendMessageToAll(connectedClients, buffer);
+                        }
                     }
                 }
             }
