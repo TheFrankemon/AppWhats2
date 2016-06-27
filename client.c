@@ -14,21 +14,31 @@
 #define PORT 8888
 #define STDIN 0
 
-struct Client
+/*typedef struct {
+  char nick[50];
+  struct sockaddr_in sockAddr;
+  struct client * next;
+} client;*/
+
+/*struct Client
 {
 	char nick[50];
 	struct sockaddr_in sockAddr;
-};
+};*/
 
-int main(int argc , char *argv[])
-{
+void validateArgs(int argc, char *argv[]) {
 	if (argc != 4) {
 		perror("error: must give 3 params (server_ip server_port nick)");
 		exit(EXIT_FAILURE);
 	}
+}
 
+int main(int argc , char *argv[])
+{
+	validateArgs(argc, argv);
+	
 	char *serverIP = argv[1];
-
+	
 	char *err;
 	int serverPort = strtol(argv[2], &err, 10); // converts port string to int
     if (err[0] != '\0') { // bad input, not a number
@@ -36,9 +46,11 @@ int main(int argc , char *argv[])
     	exit(EXIT_FAILURE);
     }
 
-	struct sockaddr_in stSockAddr;
-	int res;
 	int socketFD = socket(AF_INET, SOCK_STREAM, 0);// IPPROTO_TCP);
+	if (-1 == socketFD) {
+		perror("cannot create socket");
+		exit(EXIT_FAILURE);
+	}
 
 	//bind the socket to localhost port 8888
 	/*if (bind(socketFD, (struct sockaddr *)&stSockAddr, sizeof(stSockAddr))<0) {
@@ -46,12 +58,9 @@ int main(int argc , char *argv[])
 		exit(EXIT_FAILURE);
 	}*/
 	//printf("Listener on port %d \n", PORT);
-	
-	if (-1 == socketFD) {
-		perror("cannot create socket");
-		exit(EXIT_FAILURE);
-	}
 
+	int res;
+	struct sockaddr_in stSockAddr;
 	memset(&stSockAddr, 0, sizeof(struct sockaddr_in));
 
 	stSockAddr.sin_family = AF_INET;
@@ -77,10 +86,10 @@ int main(int argc , char *argv[])
 
 	printf("Connecting to %s:%d\n", serverIP, serverPort);
 
-	struct Client cData;
+	/*struct client cData;
 	strcpy(cData.nick, argv[3]);
-	//cData.nick = argv[3];
 	cData.sockAddr = stSockAddr;
+	cData.next = NULL;*/
 
 	int activity, valread;
 	int max_sd;
@@ -93,7 +102,7 @@ int main(int argc , char *argv[])
 	//calculates max file descriptor
 	max_sd = (socketFD > STDIN) ? socketFD : STDIN;
 	
-	while(TRUE) 
+	while(1) 
 	{
 		//clear the socket set
 		FD_ZERO(&readfds);
@@ -117,17 +126,15 @@ int main(int argc , char *argv[])
 		
 		//STDIN activity
 		if (FD_ISSET(STDIN, &readfds)) {
-			
 			valread = read(STDIN, buffer, 1024);
 			buffer[valread] = '\0';
 			send(socketFD, buffer , strlen(buffer) , 0);
+
+			/*if (strncmp(buffer, "#quit", 5) == 0) {
+				exit(EXIT_SUCCESS);
+			}*/
 		}
 	}
 
-
-	shutdown(socketFD, SHUT_RDWR);
-
-	close(socketFD);
-	
-	return 0;
+	exit(EXIT_FAILURE);
 }
