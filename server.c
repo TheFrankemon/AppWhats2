@@ -139,6 +139,26 @@ int sendMessageToAll(client* list, char* buffer) {
 
     return 1;
 }
+
+int getAllClients(client* list, char* buffer) {
+    char aux[1025];
+    client* tmp = list;
+    strcpy(buffer, "> Connected users:");
+    if (tmp == NULL) {
+        return 0;
+    } else {
+        sprintf(aux, "%s %s", buffer, tmp -> nick);
+        strcpy(buffer, aux);
+        tmp = (client*)(tmp->next);
+    }
+    while (tmp != NULL) {
+        sprintf(aux, "%s, %s", buffer, tmp -> nick);
+        strcpy(buffer, aux);
+        tmp = (client*)(tmp->next);
+    }
+
+    return 1;
+}
  
 int main(int argc , char *argv[]) {
     //Verify if the server has its defined Port.
@@ -157,7 +177,8 @@ int main(int argc , char *argv[]) {
     client* tmp;
       
     char buffer[1025];  //data buffer of 1K
-      
+    char auxBuffer[1025];
+
     //set of socket descriptors
     fd_set readfds;
       
@@ -294,7 +315,7 @@ int main(int argc , char *argv[]) {
                     //client_socket[i] = 0;
                     removeClient(&connectedClients, sd);*/
                     disconnectClient(&connectedClients, sd);
-                    sprintf(buffer, "@%s lost connection", tmp -> nick);
+                    sprintf(buffer, "> @%s lost connection", tmp -> nick);
                     sendMessageToAll(connectedClients, buffer);
                 } else { //Echo back the message that came in
                     //set the string terminating NULL byte on the end of the data read
@@ -304,7 +325,7 @@ int main(int argc , char *argv[]) {
                         strcpy(tmp -> nick, buffer);
                         tmp -> firstMsg = 0;
                         if (checkNickname(connectedClients, tmp)) {
-                            sprintf(buffer, "@%s has joined the chat", tmp -> nick);
+                            sprintf(buffer, "> @%s has joined the chat", tmp -> nick);
                             sendMessageToAllExcept(connectedClients, buffer, sd);
                         } else {
                             sprintf(buffer, "Sorry '%s' is already connected, please change nickname and retry...", tmp -> nick);
@@ -314,13 +335,15 @@ int main(int argc , char *argv[]) {
                         }                        
                     } else {
                         if (strncmp(buffer, "#quit", 5) == 0) {
-                            /*close(sd);
-                            removeClient(&connectedClients, sd);*/
                             disconnectClient(&connectedClients, sd);
-                            sprintf(buffer, "@%s hast left the chat", tmp -> nick);
+                            sprintf(buffer, "> @%s hast left the chat", tmp -> nick);
                             sendMessageToAll(connectedClients, buffer);
+                        } else if (strncmp(buffer, "#showall", 8) == 0) {
+                            getAllClients(connectedClients, buffer);
+                            sendMessageTo(sd, buffer);
                         } else {
-                            sendMessageToAll(connectedClients, buffer);
+                            sprintf(auxBuffer, "%s> %s", tmp -> nick, buffer);
+                            sendMessageToAll(connectedClients, auxBuffer);
                         }
                     }
                 }
