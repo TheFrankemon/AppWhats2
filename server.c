@@ -257,6 +257,8 @@ int main(int argc , char *argv[]) {
             }
               
             puts("Welcome message sent successfully");
+            sprintf(buffer, "@%d has joined the chat", sd);
+            sendMessageToAll(connectedClients, buffer);
               
             //add new socket to array of sockets
             /*for (i = 0; i < max_clients; i++) {
@@ -291,7 +293,7 @@ int main(int argc , char *argv[]) {
                     //client_socket[i] = 0;
                     removeClient(&connectedClients, sd);*/
                     disconnectClient(&connectedClients, sd);
-                    sprintf(buffer, "%d lost connection.", sd);
+                    sprintf(buffer, "@%d lost connection", sd);
                     sendMessageToAll(connectedClients, buffer);
                 } else { //Echo back the message that came in
                     //set the string terminating NULL byte on the end of the data read
@@ -301,7 +303,7 @@ int main(int argc , char *argv[]) {
                         /*close(sd);
                         removeClient(&connectedClients, sd);*/
                         disconnectClient(&connectedClients, sd);
-                        sprintf(buffer, "%d quit.", sd);
+                        sprintf(buffer, "@%d hast left the chat", sd);
                         sendMessageToAll(connectedClients, buffer);
                     } else {
                         sendMessageToAll(connectedClients, buffer);
