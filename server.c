@@ -15,6 +15,128 @@
   
 #define TRUE   1
 #define FALSE  0
+
+typedef struct {
+  char nick[50];
+  //struct sockaddr_in sockAddr;
+  int socketFD;
+  struct client * next;
+} client;
+
+int removeClient(client** list, int fd) {
+    client* tmp = *list;
+    if (tmp == NULL) {
+        return 0;
+    }
+    if (tmp -> socketFD == fd) {
+        //tmp = *list;
+        *list = (client *) tmp -> next;
+        return 1;
+    } else {
+        for (tmp = *list; tmp -> next != NULL; ) {
+            //tmp = (client*)(tmp->next);
+            if (((client*)(tmp -> next)) -> socketFD == fd) {
+                tmp -> next = (client *)(((client *)(tmp -> next)) -> next);
+                return 1;
+            }
+            /*if (tmp -> socketFD == fd) {
+                tmp = (client *) tmp -> next;
+                return 1;
+            }*/
+            tmp = (client*)(tmp->next);
+        }
+    }
+
+    return 0;
+}
+
+int pushClient(client** list, client** elem) {
+    client* tmp = NULL;
+  
+    if (*elem == NULL) {
+        //printf ("El elemento a insertar es nulo. ");
+        return 0; 
+    }
+  
+    if (*list == NULL) {
+        //printf ("Se inserta el primer elemento.\n");
+        *list = *elem;
+        *elem = NULL;
+        //mostrar_punto(**cadena);
+    }
+    else {
+        //printf ("La cadena no esta vacia\n");
+        for (tmp = *list; tmp->next != NULL; ) {
+            tmp = (client*)(tmp->next);
+        }
+        tmp->next = (struct client*) *elem;
+        *elem = NULL;
+    }
+  
+    return 1;
+}
+
+void disconnectClient(client** connectedClients, int sd) {
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    getpeername(sd , (struct sockaddr*) &address , (socklen_t*) &addrlen);
+    printf("Host disconnected , ip %s , port %d \n" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
+      
+    //Close the socket and mark as 0 in list for reuse
+    close(sd);
+    //client_socket[i] = 0;
+    removeClient(connectedClients, sd);
+}
+
+int sendMessageTo(client* list, char* buffer, int fd) {
+    client* tmp = list;
+
+    if (tmp == NULL) {
+        return 0;
+    }
+
+    for (; tmp != NULL; ) {
+        if (tmp -> socketFD == fd) {
+            send(tmp -> socketFD, buffer, strlen(buffer), 0);
+            return 1;
+        }
+        tmp = (client*)(tmp->next);
+    }
+
+    return 0;
+}
+
+int sendMessageToAllExcept(client* list, char* buffer, int fd) {
+    client* tmp = list;
+
+    if (tmp == NULL) {
+        return 0;
+    }
+
+    for (; tmp != NULL; ) {
+        if (tmp -> socketFD != fd) {
+            send(tmp -> socketFD, buffer, strlen(buffer), 0);
+        }
+        tmp = (client*)(tmp->next);
+    }
+
+    return 1;
+}
+
+int sendMessageToAll(client* list, char* buffer) {
+    client* tmp = list;
+
+    if (tmp == NULL) {
+        return 0;
+    }
+
+    for (; tmp != NULL; ) {
+        send(tmp -> socketFD, buffer, strlen(buffer), 0);
+        tmp = (client*)(tmp->next);
+    }
+
+    return 1;
+}
  
 int main(int argc , char *argv[]) {
     //Verify if the server has its defined Port.
@@ -28,6 +150,9 @@ int main(int argc , char *argv[]) {
     int master_socket , addrlen , new_socket , client_socket[30] , max_clients = 30 , activity, i , valread , sd;
     int max_sd;
     struct sockaddr_in address;
+
+    client* connectedClients = NULL;
+    client* tmp;
       
     char buffer[1025];  //data buffer of 1K
       
@@ -38,9 +163,9 @@ int main(int argc , char *argv[]) {
     char *message = "ECHO Daemon v1.0 \r\n";
   
     //initialise all client_socket[] to 0 so not checked
-    for (i = 0; i < max_clients; i++) {
+    /*for (i = 0; i < max_clients; i++) {
         client_socket[i] = 0;
-    }
+    }*/
       
     //create a master socket
     if( (master_socket = socket(AF_INET , SOCK_STREAM , 0)) == 0) {
@@ -85,7 +210,18 @@ int main(int argc , char *argv[]) {
         max_sd = master_socket;
          
         //add child sockets to set
-        for ( i = 0 ; i < max_clients ; i++) {
+        for (tmp = connectedClients; tmp != NULL;) {
+            sd = tmp -> socketFD;
+            if(sd > 0) {
+                FD_SET( sd , &readfds);
+            }
+            if(sd > max_sd) {
+                max_sd = sd;
+            }
+
+            tmp = (client*) tmp -> next;
+        }        
+        /*for ( i = 0 ; i < max_clients ; i++) {
             //socket descriptor
             sd = client_socket[i];
              
@@ -96,7 +232,7 @@ int main(int argc , char *argv[]) {
             //highest file descriptor number, need it for the select function
             if(sd > max_sd)
                 max_sd = sd;
-        }
+        }*/
   
         //wait for an activity on one of the sockets , timeout is NULL , so wait indefinitely
         activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
@@ -121,9 +257,11 @@ int main(int argc , char *argv[]) {
             }
               
             puts("Welcome message sent successfully");
+            sprintf(buffer, "@%d has joined the chat", sd);
+            sendMessageToAll(connectedClients, buffer);
               
             //add new socket to array of sockets
-            for (i = 0; i < max_clients; i++) {
+            /*for (i = 0; i < max_clients; i++) {
                 //if position is empty
                 if( client_socket[i] == 0 ) {
                     client_socket[i] = new_socket;
@@ -131,28 +269,48 @@ int main(int argc , char *argv[]) {
                      
                     break;
                 }
-            }
+            }*/
+            client* newClient = (client*) malloc(sizeof(client));
+            newClient -> socketFD = new_socket;
+            newClient -> next = NULL;
+            pushClient(&connectedClients, &newClient);
         }
           
         //else its some IO operation on some other socket :)
-        for (i = 0; i < max_clients; i++) {
-            sd = client_socket[i];
+        //for (i = 0; i < max_clients; i++) {
+          //  sd = client_socket[i];
+        for (tmp = connectedClients; tmp != NULL;) {
+            sd = tmp -> socketFD;
             if (FD_ISSET( sd , &readfds)) {
                 //Check if it was for closing , and also read the incoming message
                 if ((valread = read( sd , buffer, 1024)) == 0) {
                     //Somebody disconnected , get his details and print
-                    getpeername(sd , (struct sockaddr*)&address , (socklen_t*)&addrlen);
+                    /*getpeername(sd , (struct sockaddr*)&address , (socklen_t*)&addrlen);
                     printf("Host disconnected , ip %s , port %d \n" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
                       
                     //Close the socket and mark as 0 in list for reuse
-                    close( sd );
-                    client_socket[i] = 0;
+                    close(sd);
+                    //client_socket[i] = 0;
+                    removeClient(&connectedClients, sd);*/
+                    disconnectClient(&connectedClients, sd);
+                    sprintf(buffer, "@%d lost connection", sd);
+                    sendMessageToAll(connectedClients, buffer);
                 } else { //Echo back the message that came in
                     //set the string terminating NULL byte on the end of the data read
                     buffer[valread] = '\0';
-                    send(sd , buffer , strlen(buffer) , 0 );
+                    //send(sd , buffer , strlen(buffer) , 0 );
+                    if (strncmp(buffer, "#quit", 5) == 0) {
+                        /*close(sd);
+                        removeClient(&connectedClients, sd);*/
+                        disconnectClient(&connectedClients, sd);
+                        sprintf(buffer, "@%d hast left the chat", sd);
+                        sendMessageToAll(connectedClients, buffer);
+                    } else {
+                        sendMessageToAll(connectedClients, buffer);
+                    }
                 }
             }
+            tmp = (client*) tmp -> next;
         }
     }
     return 0;
