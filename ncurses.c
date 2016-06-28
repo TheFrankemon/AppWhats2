@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <ncurses.h>
+#include <string.h>
 
 char nameTemp[160];
-char * array[50], c, pos, cap;
+char array[10][1025], c, pos, pos = 0;
 
 void drawLogo() {
 	mvprintw(8,8,"        /\\            \\            / /        /       #######");
@@ -21,12 +22,19 @@ void scrollBuffer() {
     	array[c] = array[c+1]; 
 }
 */
-void printBuffer(char* msg) {
-	array[pos] = msg;
-	//for( c = 0 ; c < 9 ; c++ )
-	mvprintw( 4, 3, array[0]);
-	mvprintw( 5, 3, array[1]);
-	mvprintw( 6, 3, array[2]);
+void printBuffer(char *msg) {
+	//mvprintw( 10, 10, msg);
+	//array[pos] = msg;
+	strcpy(array[pos], msg);
+	pos++;
+//	if (pos > 9) {
+//		pos = 8;
+//	}
+
+	for(int c = 0 ; c < pos ; c++ ) {
+		mvprintw(4 + c, 4, array[c]);
+	}
+	mvprintw(4,4,array[0]);
 }
 
 int main() {
@@ -42,13 +50,12 @@ int main() {
 	attroff(COLOR_PAIR(1));
 	attron(COLOR_PAIR(2));
 	getch(); //Press any key 2 advance
-		wborder(local_win, '{', '}', '^','v','*','*','*','*'); //Draw interface
+		wborder(local_win, '<', '>', '^','v','*','*','*','*'); //Draw interface
 		wbkgd(local_win, COLOR_PAIR(2));
 		mvprintw(0, 14, "== AppWhats 2 TM - Just plain chatting, literally =="); //Draws title
 		mvprintw(18, 1, "==============================================================================");
 		attroff(COLOR_PAIR(2));
 
-	pos = 0;
 	for (; ;)	{
 		attron(COLOR_PAIR(1)); //Black background for user writing.
 		mvprintw(19, 1, "                                                                              ");
@@ -61,7 +68,6 @@ int main() {
 		move(19, 3);
 	    getstr(nameTemp); //Start chatting
 	    printBuffer(nameTemp);
-		pos = pos + 1;
 
 //	    if (getch() == ']')
 //	    	endwin();
