@@ -92,7 +92,6 @@ void disconnectClient(client** connectedClients, int sd) {
 int checkNickname(client* list, client* newClient) {
     client* tmp = list;
     for (; tmp != NULL; ) {
-        printf("%s = %s\n", tmp -> nick, newClient -> nick);
         if (tmp -> socketFD != newClient -> socketFD &&
             strcmp(tmp -> nick, newClient -> nick) == 0) {
             return 0;
@@ -103,7 +102,9 @@ int checkNickname(client* list, client* newClient) {
 }
 
 int sendMessageTo(int fd, char* buffer) {
-    send(fd, buffer, strlen(buffer), 0);
+    if(send(fd, buffer, strlen(buffer), 0) != strlen(buffer)) {
+        perror("send");
+    }
 
     return 1;
 }
@@ -117,7 +118,7 @@ int sendMessageToAllExcept(client* list, char* buffer, int fd) {
 
     for (; tmp != NULL; ) {
         if (tmp -> socketFD != fd) {
-            send(tmp -> socketFD, buffer, strlen(buffer), 0);
+            sendMessageTo(tmp -> socketFD, buffer);
         }
         tmp = (client*)(tmp->next);
     }
@@ -133,7 +134,7 @@ int sendMessageToAll(client* list, char* buffer) {
     }
 
     for (; tmp != NULL; ) {
-        send(tmp -> socketFD, buffer, strlen(buffer), 0);
+        sendMessageTo(tmp -> socketFD, buffer);
         tmp = (client*)(tmp->next);
     }
 
@@ -159,6 +160,52 @@ int getAllClients(client* list, char* buffer) {
 
     return 1;
 }
+
+int sendPrivateMessage(client* from, char* buffer, client* list) {
+    client* tmp = list;
+    /*int nickLength = index(buffer, ' ') - 1;
+    char nickTo[nickLength], aux[1025];
+    printf("%s : %d\n", buffer, nickLength);
+    strncpy(nickTo, buffer + 1, nickLength);
+    printf("%s\n", nickTo);
+    //nickTo[nickLength] = '\0';
+    strcpy(aux, buffer + 2 + nickLength);
+    printf("%s -> %s\n", nickTo, aux);
+    sprintf(buffer, "#private %s> %s", from -> nick, aux);*/
+
+    char *newline = strchr(buffer, '\n');
+    if (newline) {
+      *newline = 0;
+    }
+
+    char *nickTo, aux[1025], msg[1025];
+    strcpy(aux, buffer);
+
+    nickTo = strtok(buffer + 1, " ");
+    strcpy(msg, aux + 1 + strlen(nickTo) + 1);
+    sprintf(aux, "#private %s> %s", from -> nick, msg);
+
+    //sprintf(msg, "'%s' -> '%s'\n", nickTo, buffer);
+    //printf("'%s' -> '%s'", nickTo, msg);
+    //printf("ooook\n");
+    
+    if (strcmp(from -> nick, nickTo) == 0) {
+        sendMessageTo(from -> socketFD, "> Can't send private messages to yourself");
+        return 0;
+    }
+
+    while (tmp != NULL) {
+        if (strcmp(tmp -> nick, nickTo) == 0) {
+            sendMessageTo(tmp -> socketFD, aux);
+            return 1;
+        }
+        tmp = (client*)(tmp->next);
+    }
+
+    sprintf(aux, "> %s is not connected", nickTo);
+    sendMessageTo(from -> socketFD, aux);
+    return 0;
+}
  
 int main(int argc , char *argv[]) {
     //Verify if the server has its defined Port.
@@ -181,9 +228,6 @@ int main(int argc , char *argv[]) {
 
     //set of socket descriptors
     fd_set readfds;
-      
-    //a message
-    char *message = "ECHO Daemon v1.0 \r\n";
   
     //initialise all client_socket[] to 0 so not checked
     /*for (i = 0; i < max_clients; i++) {
@@ -222,7 +266,7 @@ int main(int argc , char *argv[]) {
       
     //accept the incoming connection
     addrlen = sizeof(address);
-    puts("Waiting for connections ...");
+    puts("AppWhats2 chat server started... Waiting for connections...");
      
     while(TRUE) {
         //clear the socket set
@@ -273,14 +317,7 @@ int main(int argc , char *argv[]) {
           
             //inform user of socket number - used in send and receive commands
             printf("New connection , socket fd is %d , ip is : %s , port : %d \n" , new_socket , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
-        
-            //send new connection greeting message
-            if( send(new_socket, message, strlen(message), 0) != strlen(message) ) {
-                perror("send");
-            }
-              
-            puts("Welcome message sent successfully");
-              
+            
             //add new socket to array of sockets
             /*for (i = 0; i < max_clients; i++) {
                 //if position is empty
@@ -325,6 +362,7 @@ int main(int argc , char *argv[]) {
                         strcpy(tmp -> nick, buffer);
                         tmp -> firstMsg = 0;
                         if (checkNickname(connectedClients, tmp)) {
+                            printf("%s has connected\n", tmp -> nick);
                             sprintf(buffer, "> @%s has joined the chat", tmp -> nick);
                             sendMessageToAllExcept(connectedClients, buffer, sd);
                         } else {
@@ -335,12 +373,16 @@ int main(int argc , char *argv[]) {
                         }                        
                     } else {
                         if (strncmp(buffer, "#quit", 5) == 0) {
+                        //if (strcmp(buffer, "#quit") == 0) {
                             disconnectClient(&connectedClients, sd);
                             sprintf(buffer, "> @%s hast left the chat", tmp -> nick);
                             sendMessageToAll(connectedClients, buffer);
                         } else if (strncmp(buffer, "#showall", 8) == 0) {
+                        //} else if (strcmp(buffer, "#showall") == 0) {
                             getAllClients(connectedClients, buffer);
                             sendMessageTo(sd, buffer);
+                        } else if (strncmp(buffer, "@", 1) == 0) {
+                            sendPrivateMessage(tmp, buffer, connectedClients);
                         } else {
                             sprintf(auxBuffer, "%s> %s", tmp -> nick, buffer);
                             sendMessageToAll(connectedClients, auxBuffer);
