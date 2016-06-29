@@ -152,12 +152,48 @@ int getAllClients(client* list, char* buffer) {
         strcpy(buffer, aux);
         tmp = (client*)(tmp->next);
     }
+    //aux[strlen(aux)] = '\0';
+
     while (tmp != NULL) {
         sprintf(aux, "%s, %s", buffer, tmp -> nick);
         strcpy(buffer, aux);
         tmp = (client*)(tmp->next);
     }
 
+    return 1;
+}
+
+int sendCommonMessage(client* from, char* buffer, client* list) {
+    client* tmp = list;
+    char aux[strlen(buffer) + strlen(from -> nick) + 3 + 1];
+
+    sprintf(aux, "%s > %s", from -> nick, buffer);
+    aux[strlen(buffer) + strlen(from -> nick) + 3] = '\0';
+    //strcpy(buffer, aux);
+    //buffer[strlen(aux)] = '\0';
+    //printf("%d\n", strlen(aux));
+
+    sendMessageToAll(list, aux);
+
+    /*client* tmp = list;
+    char aux[1025], temp[75];
+    int curPos = 0;
+
+    strcpy(aux, buffer);
+
+    printf("%d\n", strlen(aux) - curPos);
+
+    while (strlen(aux) - curPos > 74) {
+        memcpy(temp, aux + curPos, 74);
+        temp[74] = '\0';
+        sprintf(buffer, "%s > %s\n", from -> nick, temp);
+        sendMessageToAll(list, buffer);        
+        curPos += 74;
+    }
+
+    sprintf(buffer, "%s > %s", from -> nick, aux + curPos);
+    sendMessageToAll(list, buffer);*/
+    
     return 1;
 }
 
@@ -225,6 +261,8 @@ int main(int argc , char *argv[]) {
       
     char buffer[1025];  //data buffer of 1K
     char auxBuffer[1025];
+
+    auxBuffer[0] = '\0';
 
     //set of socket descriptors
     fd_set readfds;
@@ -385,8 +423,13 @@ int main(int argc , char *argv[]) {
                         } else if (strncmp(buffer, "@", 1) == 0) {
                             sendPrivateMessage(tmp, buffer, connectedClients);
                         } else {
-                            sprintf(auxBuffer, "%s> %s", tmp -> nick, buffer);
-                            sendMessageToAll(connectedClients, auxBuffer);
+                            //sprintf(auxBuffer, "%s> %s", tmp -> nick, buffer);
+                            //auxBuffer[strlen(tmp -> nick) + strlen(buffer) + 2] = '\0';
+                            //strncpy(auxBuffer, buffer, strlen(buffer));
+                            //sprintf(buffer, " %s> %s ", tmp -> nick, auxBuffer);
+                            //printf("%d\n", strlen(auxBuffer));
+                            //sendMessageToAll(connectedClients, buffer);
+                            sendCommonMessage(tmp, buffer, connectedClients);
                         }
                     }
                 }
