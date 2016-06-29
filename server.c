@@ -357,6 +357,7 @@ int main(int argc , char *argv[]) {
                 } else { //Echo back the message that came in
                     //set the string terminating NULL byte on the end of the data read
                     buffer[valread] = '\0';
+                    printf("%s\n", buffer);
                     //send(sd , buffer , strlen(buffer) , 0 );
                     if (tmp -> firstMsg) {
                         strcpy(tmp -> nick, buffer);
