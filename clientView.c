@@ -18,6 +18,7 @@
 char nameTemp[160];
 char array[18][1025], pos = 0;
 WINDOW* local_win;
+WINDOW* top_win;
 
 void drawLogo() {
 	mvprintw(8,8,"        /\\            \\            / /        /       #######");
@@ -51,6 +52,24 @@ void printBuffer(char *msg) {
 	}
 }
 
+void clearBottom() {
+	attron(COLOR_PAIR(1)); //Black background for user writing.
+	mvprintw(21, 1, "                                                                              ");
+	mvprintw(22, 1, "                                                                              ");
+	attroff(COLOR_PAIR(1));
+	move(21, 3);
+}
+
+void drawTopGreen() {
+	attron(COLOR_PAIR(2));
+	wborder(top_win, '<', '>', '^','v','*','*','*','*'); //Draw interface
+	wbkgd(top_win, COLOR_PAIR(2));
+	mvprintw(0, 14, "== AppWhats 2 TM - Just plain chatting, literally =="); //Draws title
+	mvprintw(20, 1, "==============================================================================");
+	attroff(COLOR_PAIR(2));
+	move(21, 3);
+}
+
 void drawGreen() {
 	attron(COLOR_PAIR(2));
 	wborder(local_win, '<', '>', '^','v','*','*','*','*'); //Draw interface
@@ -58,6 +77,7 @@ void drawGreen() {
 	mvprintw(0, 14, "== AppWhats 2 TM - Just plain chatting, literally =="); //Draws title
 	mvprintw(20, 1, "==============================================================================");
 	attroff(COLOR_PAIR(2));
+	move(21, 3);
 }
 
 void validateArgs(int argc, char *argv[]) {
@@ -126,6 +146,7 @@ int main(int argc , char *argv[])
 	raw();
 	start_color();
 	local_win = newwin(24, 80, 0, 0);
+	top_win = newwin(21, 80, 0, 0);
 	init_pair(1, COLOR_GREEN, COLOR_BLACK);
 	init_pair(2, COLOR_BLACK, COLOR_GREEN);
 	attron(COLOR_PAIR(1));
@@ -175,6 +196,7 @@ int main(int argc , char *argv[])
 		
 		//getstr(nameTemp);
 		//endwin();
+		refresh();
 		activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
 		//refresh();
 		
@@ -188,10 +210,13 @@ int main(int argc , char *argv[])
 			buffer[valread] = '\0';
 			//printf("Msg: %s\n----------------------\n", buffer);
 			if (valread == 0) {
+				endwin();
 				exit(EXIT_SUCCESS);
 			} else {
 				//printf("%s\n", buffer);
-				printBuffer(nameTemp);
+				drawTopGreen();
+				printBuffer(buffer);
+				wrefresh(top_win);
 			}
 		}
 		
@@ -200,6 +225,8 @@ int main(int argc , char *argv[])
 			valread = read(STDIN, buffer, 1024);
 			buffer[valread] = '\0';
 			send(socketFD, buffer , strlen(buffer) , 0);
+			clearBottom();
+			refresh();
 
 			/*if (strncmp(buffer, "#quit", 5) == 0) {
 				exit(EXIT_SUCCESS);
@@ -207,7 +234,7 @@ int main(int argc , char *argv[])
 		}
 	}
 
-	getch();
+	//getch();
 	endwin();
 	exit(EXIT_FAILURE);
 }
