@@ -141,7 +141,7 @@ int main(int argc , char *argv[])
 	attroff(COLOR_PAIR(1));
 	wrefresh(local_win);
 	echo();
-	cbreak();
+	nocbreak();
 	//timeout(500);
 	move(21, 3);
 
