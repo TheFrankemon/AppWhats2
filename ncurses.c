@@ -61,7 +61,7 @@ int main() {
 	getch(); //Press any key 2 advance
 	drawGreen(); 
 
-	for (; ;)	{
+	while(1) {
 		drawGreen();
 		attron(COLOR_PAIR(1)); //Black background for user writing.
 		mvprintw(21, 1, "                                                                              ");
