@@ -375,7 +375,7 @@ int main(int argc , char *argv[]) {
                         if (strncmp(buffer, "#quit", 5) == 0) {
                         //if (strcmp(buffer, "#quit") == 0) {
                             disconnectClient(&connectedClients, sd);
-                            sprintf(buffer, "> @%s hast left the chat", tmp -> nick);
+                            sprintf(buffer, "> @%s has left the chat", tmp -> nick);
                             sendMessageToAll(connectedClients, buffer);
                         } else if (strncmp(buffer, "#showall", 8) == 0) {
                         //} else if (strcmp(buffer, "#showall") == 0) {
