@@ -203,14 +203,14 @@ int main(int argc , char *argv[])
 		//endwin();
 		refresh();
 		//getstr(buffer);
-		move(21, 3);
+		//move(21, 3);
 		
 		//printf("I'm here");
 		//mvprintw(21, 3, "I'm here");
 		//fflush(stdout);
 		//fflush(stdin);
 		
-		move(21, 3);
+		//move(21, 3);
 		//getstr(buffer);
 		activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
 		//printw("Now I'm here");
@@ -238,16 +238,20 @@ int main(int argc , char *argv[])
 		
 		//STDIN activity
 		if (FD_ISSET(STDIN, &readfds)) {
-			drawGreen();
-			attron(COLOR_PAIR(1)); //Black background for user writing.
-			mvprintw(21, 1, "                                                                              ");
-			mvprintw(22, 1, "                                                                              ");
-			attroff(COLOR_PAIR(1));
-			wrefresh(local_win);
+			//drawGreen();
+			//attron(COLOR_PAIR(1)); //Black background for user writing.
+			//mvprintw(21, 1, "                                                                              ");
+			//mvprintw(22, 1, "                                                                              ");
+			//attroff(COLOR_PAIR(1));
+			//wrefresh(local_win);
 
-			c = getch();
+			//move(21, 3 + flag);
+			/*c = getch();
 			buffer[flag] = c;
+			clearBottom();
 			flag++;
+			buffer[flag] = '\0';
+			mvprintw(21, 3, buffer);
 			if (c==3) {
 				printf("Exit [%d]\n", c);
 				system("/bin/stty cooked");
@@ -255,12 +259,22 @@ int main(int argc , char *argv[])
 			}
 			if (c == 10) {
 				//printf("Sending to server...\n");
-				send(socketFD, buffer , strlen(buffer) , 0);
+				//buffer[flag] = '\0';
+				send(socketFD, buffer , flag , 0);
+				//strcpy(buffer, " ");
+				memset(buffer,0,sizeof(buffer));
+				flag = 0;
 				clearBottom();
 				refresh();
-			}
-			printf("%u", c);
-			fflush(stdout);
+			}*/
+
+			move(21, 3);
+			getstr(buffer);
+			send(socketFD, buffer , strlen(buffer), 0);
+			clearBottom();
+			refresh();
+			//printf("%u", c);
+			//fflush(stdout);
 			/*
 			valread = read(STDIN, buffer, 1024);
 			buffer[valread] = '\0';
