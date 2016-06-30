@@ -113,7 +113,7 @@ int main(int argc , char *argv[])
 	}*/
 	//printf("Listener on port %d \n", PORT);
 
-	int res;
+	int res, c;
 	struct sockaddr_in stSockAddr;
 	memset(&stSockAddr, 0, sizeof(struct sockaddr_in));
 
@@ -180,13 +180,15 @@ int main(int argc , char *argv[])
 	int max_sd;
 
 	char buffer[1025];  //data buffer of 1K
-	
+	int flag = 0;
 	//set of socket descriptors
 	fd_set readfds;
 
 	//calculates max file descriptor
 	max_sd = (socketFD > STDIN) ? socketFD : STDIN;
 	
+	system("/bin/stty raw"); //Kills buffering
+
 	while(1) {
 
 		//clear the socket set
@@ -236,6 +238,30 @@ int main(int argc , char *argv[])
 		
 		//STDIN activity
 		if (FD_ISSET(STDIN, &readfds)) {
+			drawGreen();
+			attron(COLOR_PAIR(1)); //Black background for user writing.
+			mvprintw(21, 1, "                                                                              ");
+			mvprintw(22, 1, "                                                                              ");
+			attroff(COLOR_PAIR(1));
+			wrefresh(local_win);
+
+			c = getch();
+			buffer[flag] = c;
+			flag++;
+			if (c==3) {
+				printf("Exit [%d]\n", c);
+				system("/bin/stty cooked");
+				return 0;
+			}
+			if (c == 10) {
+				//printf("Sending to server...\n");
+				send(socketFD, buffer , strlen(buffer) , 0);
+				clearBottom();
+				refresh();
+			}
+			printf("%u", c);
+			fflush(stdout);
+			/*
 			valread = read(STDIN, buffer, 1024);
 			buffer[valread] = '\0';
 			send(socketFD, buffer , strlen(buffer) , 0);
