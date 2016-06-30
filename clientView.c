@@ -142,6 +142,7 @@ int main(int argc , char *argv[])
 
 	send(socketFD, argv[3] , strlen(argv[3]) , 0);
 
+	//freopen("/dev/tty", "rw", stdin);
 	initscr();
 	raw();
 	start_color();
@@ -161,6 +162,8 @@ int main(int argc , char *argv[])
 	mvprintw(22, 1, "                                                                              ");
 	attroff(COLOR_PAIR(1));
 	wrefresh(local_win);
+	//nodelay(stdscr,TRUE);
+	//keypad(stdscr, FALSE);
 	echo();
 	nocbreak();
 	//timeout(500);
@@ -197,7 +200,18 @@ int main(int argc , char *argv[])
 		//getstr(nameTemp);
 		//endwin();
 		refresh();
+		//getstr(buffer);
+		move(21, 3);
+		
+		//printf("I'm here");
+		//mvprintw(21, 3, "I'm here");
+		//fflush(stdout);
+		//fflush(stdin);
+		
+		move(21, 3);
+		//getstr(buffer);
 		activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
+		//printw("Now I'm here");
 		//refresh();
 		
 		if ((activity < 0) && (errno!=EINTR)) {
@@ -227,6 +241,8 @@ int main(int argc , char *argv[])
 			send(socketFD, buffer , strlen(buffer) , 0);
 			clearBottom();
 			refresh();
+			mvprintw(21, 3, buffer);
+			fflush(stdout);
 
 			/*if (strncmp(buffer, "#quit", 5) == 0) {
 				exit(EXIT_SUCCESS);
