@@ -28,7 +28,7 @@ void drawLogo() {
 	mvprintw(12,8,"    /        \\/__//__/    \\/  \\/ /  / /_/ /_ __/   #######   ");
 	mvprintw(13,8,"             /   /                                           ");
 	mvprintw(14,8,"____________/   /____________________________________________");
-	mvprintw(15,8,"__________PRESS ANY KEY TO CHAT LIKE A REAL DEV :v___________");
+	mvprintw(15,7,"__________ENTER YOUR NAME TO CHAT LIKE A REAL DEV :v___________");
 }
  
 
@@ -81,8 +81,8 @@ void drawGreen() {
 }
 
 void validateArgs(int argc, char *argv[]) {
-	if (argc != 4) {
-		perror("error: must give 3 params (server_ip server_port nick)");
+	if (argc != 3) {
+		perror("error: must give 2 params (server_ip server_port)");
 		exit(EXIT_FAILURE);
 	}
 }
@@ -90,6 +90,8 @@ void validateArgs(int argc, char *argv[]) {
 int main(int argc , char *argv[])
 {
 	validateArgs(argc, argv);
+
+	int hasNick = 0;
 	
 	char *serverIP = argv[1];
 	
@@ -140,10 +142,10 @@ int main(int argc , char *argv[])
 
 	printf("Connecting to %s:%d\n", serverIP, serverPort);
 
-	send(socketFD, argv[3] , strlen(argv[3]) , 0);
+	//send(socketFD, argv[3] , strlen(argv[3]) , 0);
 
 	//freopen("/dev/tty", "rw", stdin);
-	initscr();
+	/*initscr();
 	raw();
 	start_color();
 	local_win = newwin(24, 80, 0, 0);
@@ -152,11 +154,11 @@ int main(int argc , char *argv[])
 	init_pair(2, COLOR_BLACK, COLOR_GREEN);
 	attron(COLOR_PAIR(1));
 	drawLogo();
-	attroff(COLOR_PAIR(1));
-	getch(); //Press any key 2 advance
+	attroff(COLOR_PAIR(1));*/
+	//getch(); //Press any key 2 advance
 	//drawGreen();
 
-	drawGreen();
+	/*drawGreen();
 	attron(COLOR_PAIR(1)); //Black background for user writing.
 	mvprintw(21, 1, "                                                                              ");
 	mvprintw(22, 1, "                                                                              ");
@@ -167,7 +169,7 @@ int main(int argc , char *argv[])
 	echo();
 	nocbreak();
 	//timeout(500);
-	move(21, 3);
+	move(21, 3);*/
 
 	//printf("odiafiosdihfaohisdf\n");
 
@@ -186,7 +188,17 @@ int main(int argc , char *argv[])
 
 	//calculates max file descriptor
 	max_sd = (socketFD > STDIN) ? socketFD : STDIN;
-	
+
+	initscr();
+	raw();
+	start_color();
+	local_win = newwin(24, 80, 0, 0);
+	top_win = newwin(21, 80, 0, 0);
+	init_pair(1, COLOR_GREEN, COLOR_BLACK);
+	init_pair(2, COLOR_BLACK, COLOR_GREEN);
+	attron(COLOR_PAIR(1));
+	drawLogo();
+	attroff(COLOR_PAIR(1));
 	system("/bin/stty raw"); //Kills buffering
 
 	while(1) {
@@ -220,6 +232,83 @@ int main(int argc , char *argv[])
 			printf("select error");
 		}
 		
+		//Server activity
+		if (FD_ISSET(socketFD, &readfds)) {
+			valread = read(socketFD, buffer, 1024);
+			buffer[valread] = '\0';
+			if (valread == 0) {
+				//sleep(100);
+				endwin();
+				exit(EXIT_SUCCESS);
+			} else {
+				//drawTopGreen();
+				//printBuffer(buffer);
+				//wrefresh(top_win);
+				//printf("%s\n", buffer);
+				if (strncmp(buffer, "Welcome!", 8) == 0) {
+					//printf("Holiiii\n");
+					break;
+				}
+				mvprintw(23, 8, buffer);
+			}
+		}
+		
+		//STDIN activity
+		if (FD_ISSET(STDIN, &readfds)) {
+			move(17, 10);
+			getstr(buffer);
+			send(socketFD, buffer , strlen(buffer), 0);
+			attron(COLOR_PAIR(1)); //Black background for user writing.
+			mvprintw(17, 0, "                                                                                                         ");
+			attroff(COLOR_PAIR(1));
+			refresh();
+		}
+	}
+
+	drawGreen();
+	attron(COLOR_PAIR(1)); //Black background for user writing.
+	mvprintw(21, 1, "                                                                              ");
+	mvprintw(22, 1, "                                                                              ");
+	attroff(COLOR_PAIR(1));
+	wrefresh(local_win);
+	//nodelay(stdscr,TRUE);
+	//keypad(stdscr, FALSE);
+	echo();
+	nocbreak();
+	move(21, 3);
+	system("/bin/stty raw"); //Kills buffering
+
+	while(1) {
+
+		//clear the socket set
+		FD_ZERO(&readfds);
+		
+		//add server socket to set
+		FD_SET(socketFD, &readfds);
+		FD_SET(STDIN, &readfds);
+
+		
+		//getstr(nameTemp);
+		//endwin();
+		refresh();
+		//getstr(buffer);
+		//move(21, 3);
+		
+		//printf("I'm here");
+		//mvprintw(21, 3, "I'm here");
+		//fflush(stdout);
+		//fflush(stdin);
+		
+		//move(21, 3);
+		//getstr(buffer);
+		activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
+		//printw("Now I'm here");
+		//refresh();
+		
+		if ((activity < 0) && (errno!=EINTR)) {
+			printf("select error");
+		}
+			
 		//Server activity
 		if (FD_ISSET(socketFD, &readfds)) {
 			valread = read(socketFD, buffer, 1024);

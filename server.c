@@ -21,7 +21,7 @@ typedef struct {
   //struct sockaddr_in sockAddr;
   int socketFD;
   struct client * next;
-  int firstMsg;
+  int hasNick;
 } client;
 
 int removeClient(client** list, int fd) {
@@ -369,7 +369,7 @@ int main(int argc , char *argv[]) {
             client* newClient = (client*) malloc(sizeof(client));
             newClient -> socketFD = new_socket;
             newClient -> next = NULL;
-            newClient -> firstMsg = 1;
+            newClient -> hasNick = 0;
             pushClient(&connectedClients, &newClient);
         }
           
@@ -397,18 +397,19 @@ int main(int argc , char *argv[]) {
                     buffer[valread] = '\0';
                     printf("%s\n", buffer);
                     //send(sd , buffer , strlen(buffer) , 0 );
-                    if (tmp -> firstMsg) {
+                    if (!(tmp -> hasNick)) {
                         strcpy(tmp -> nick, buffer);
-                        tmp -> firstMsg = 0;
                         if (checkNickname(connectedClients, tmp)) {
                             printf("%s has connected\n", tmp -> nick);
                             sprintf(buffer, "> @%s has joined the chat", tmp -> nick);
+                            sendMessageTo(sd, "Welcome!");
                             sendMessageToAllExcept(connectedClients, buffer, sd);
+                            tmp -> hasNick = 1;
                         } else {
                             sprintf(buffer, "Sorry '%s' is already connected, please change nickname and retry...", tmp -> nick);
                             sendMessageTo(sd, buffer);
                             //sprintf(buffer, "Sorry '%s' is already connected, please change nickname and retry...", buffer);
-                            disconnectClient(&connectedClients, sd);
+                            //disconnectClient(&connectedClients, sd);
                         }                        
                     } else {
                         if (strncmp(buffer, "#quit", 5) == 0) {
