@@ -1,13 +1,13 @@
 #include <stdio.h>
-#include <string.h>   //strlen, strncmp, strcpy
+#include <string.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <unistd.h>   //close
-#include <arpa/inet.h>    //close
+#include <unistd.h>
+#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
+#include <sys/time.h>
   
 #define TRUE   1
 #define FALSE  0
@@ -16,10 +16,10 @@
  * Struct that defines a client, it also can be used as a client list
  */
 typedef struct {
-  char nick[50];
-  int fd;
-  struct client * next; // Used for dynamic list purposes
-  int hasNick; // Used for client login
+  char nick[50]; // nickname
+  int fd; // file descriptor
+  struct client * next; // used for dynamic list purposes
+  int hasNick; // used for client login
 } client;
 
 /**
@@ -37,13 +37,13 @@ int removeClient(client** list, int fd) {
         return 0;
     }
 
-    if (tmp -> fd == fd) { // client to be removed is te first
+    if (tmp -> fd == fd) { // client to be removed is the first
         *list = (client *) tmp -> next;
         return 1;
     } else {
         for (tmp = *list; tmp -> next != NULL; ) {
             if (((client*)(tmp -> next)) -> fd == fd) { // client has been found
-                tmp -> next = (client *)(((client *)(tmp -> next)) -> next);
+                tmp -> next = ((client *)(tmp -> next)) -> next;
                 return 1;
             }
             tmp = (client*)(tmp->next);
@@ -102,19 +102,26 @@ void disconnectClient(client** connectedClients, int sd) {
  * @brief      Checks if a nickname is already being used.
  *
  * @param      list       The client list
- * @param      newClient  The new client
+ * @param      newNick    The new nick
+ * @param      buffer     The buffer to save the error message
  *
  * @return     1 is nickname is not being used.
  */
-int checkNickname(client* list, client* newClient) {
+int checkNickname(client* list, char* newNick, char* buffer) {
     client* tmp = list;
     for (; tmp != NULL; ) {
-        if (tmp -> fd != newClient -> fd &&
-            strcmp(tmp -> nick, newClient -> nick) == 0) { // Nickname is already being used
+        if (tmp -> hasNick && strcmp(tmp -> nick, newNick) == 0) { // Nickname is already being used
+            sprintf(buffer, "Sorry '%s' is already connected, please change nickname and retry...", newNick);
             return 0;
         }
         tmp = (client*)(tmp->next);
     }
+
+    if (strstr(newNick, " ") != NULL) { // Nickname contain spaces
+        sprintf(buffer, "Nickname can't contain spaces");
+        return 0;
+    }
+
     return 1;
 }
 
@@ -330,6 +337,39 @@ int initializeMasterSocket(int port) {
 }
 
 /**
+ * @brief      Clears the set of socket descriptors and adds the ones we will listen to
+ *
+ * @param[in]  master_socket     The master socket
+ * @param      readfds           The readfds set of socket descriptors
+ * @param      connectedClients  The connected clients list
+ *
+ * @return     the max file descriptor
+ */
+int cleanSocketFDSet(int master_socket, fd_set* readfds, client* connectedClients) {
+    int sd, max_fd;
+
+    //clear the socket set
+    FD_ZERO(readfds);
+
+    //add master socket to set
+    FD_SET(master_socket, readfds);
+    max_fd = master_socket;
+     
+    //add child sockets to set
+    for (client* tmp = connectedClients; tmp != NULL; tmp = (client*) tmp -> next) {
+        sd = tmp -> fd;
+        if(sd > 0) {
+            FD_SET(sd, readfds);
+        }
+        if(sd > max_fd) {
+            max_fd = sd;
+        }
+    }
+
+    return max_fd;
+}
+
+/**
  * @brief      Connects a new client.
  *
  * @param[in]  master_socket  The server socket fd
@@ -339,8 +379,8 @@ int initializeMasterSocket(int port) {
  */
 int connectClient(int master_socket, client** list) {
     int new_socket;
-    int addrlen;
     struct sockaddr_in address;
+    int addrlen = sizeof(address);
 
     if ((new_socket = accept(master_socket, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
         perror("accept");
@@ -356,55 +396,82 @@ int connectClient(int master_socket, client** list) {
     return pushClient(list, &newClient);
 }
 
+/**
+ * @brief      Tries to login the new client with a given nickname
+ *
+ * @param      tmp     The new client
+ * @param      list    The list of clients
+ * @param      buffer  The nickname
+ */
 void loginClient(client* tmp, client* list, char* buffer) {
-    strcpy(tmp -> nick, buffer);
-    if (checkNickname(list, tmp)) {
+    char newNick[50];
+    strcpy(newNick, buffer);
+    if (checkNickname(list, newNick, buffer)) { // valid nickname
+        strcpy(tmp -> nick, newNick);
+        tmp -> hasNick = 1;
+
         printf("%s has connected\n", tmp -> nick);
         sprintf(buffer, "> @%s has joined the chat", tmp -> nick);
+
         sendMessageTo(tmp -> fd, "Welcome!");
         sendMessageToAllExcept(list, buffer, tmp -> fd);
-        tmp -> hasNick = 1;
-    } else {
-        sprintf(buffer, "Sorry '%s' is already connected, please change nickname and retry...", tmp -> nick);
+    } else { // invalid nickname
         sendMessageTo(tmp -> fd, buffer);
+    }
+}
+
+/**
+ * @brief      Handles a given client's activity
+ *
+ * @param      tmp               The client with activity
+ * @param      connectedClients  The connected clients list
+ */
+void handleClientActivity(client* tmp, client* connectedClients) {
+    int valread, sd = tmp -> fd;
+    char buffer[1025], auxBuffer[1025];
+
+    if ((valread = read(sd, buffer, 1024)) == 0) { // Client has disconnected
+        disconnectClient(&connectedClients, sd);
+        sprintf(buffer, "> @%s lost connection", tmp -> nick);
+        sendMessageToAll(connectedClients, buffer);
+    } else { // Client sent a message
+        buffer[valread] = '\0';
+        if (!(tmp -> hasNick)) { // Client is trying to login
+            loginClient(tmp, connectedClients, buffer);
+        } else { // Client has already logged in
+            if (strncmp(buffer, "#quit", 5) == 0) { // Client requested to disconnect
+                disconnectClient(&connectedClients, sd);
+                sprintf(buffer, "> @%s has left the chat", tmp -> nick);
+                sendMessageToAll(connectedClients, buffer);
+            } else if (strncmp(buffer, "#showall", 8) == 0) { // Client requested to see all the users
+                getAllClients(connectedClients, buffer);
+                sendMessageTo(sd, buffer);
+            } else if (strncmp(buffer, "@", 1) == 0) { // Private message
+                sendPrivateMessage(tmp, buffer, connectedClients);
+            } else { // Normal message
+                sprintf(auxBuffer, "%s> %s", tmp -> nick, buffer);
+                sendMessageToAll(connectedClients, auxBuffer);
+            }
+        }
     }
 }
  
 int main(int argc , char *argv[]) {
     int port; // port the server will listen on
     int master_socket; // server socket
-    int activity, valread; // used for select
-    int max_fd, sd; // file descriptors
+    int activity; // used for select
+    int max_fd; // max file descriptor
 
     client* connectedClients = NULL; // list of clients
     client* tmp; // auxiliary client to iterate on the list
-      
-    char buffer[1025];  // data buffer of 1K
-    char auxBuffer[1025]; // auxiliary buffer for string operations
 
-    fd_set readfds; //set of socket descriptors
+    fd_set readfds; // set of socket descriptors
     
     port = validatePort(argc, argv);
     master_socket = initializeMasterSocket(port);
      
     while(TRUE) {
-        //clear the socket set
-        FD_ZERO(&readfds);
-  
-        //add master socket to set
-        FD_SET(master_socket, &readfds);
-        max_fd = master_socket;
-         
-        //add child sockets to set
-        for (tmp = connectedClients; tmp != NULL; tmp = (client*) tmp -> next) {
-            sd = tmp -> fd;
-            if(sd > 0) {
-                FD_SET( sd , &readfds);
-            }
-            if(sd > max_fd) {
-                max_fd = sd;
-            }
-        }
+        max_fd = cleanSocketFDSet(master_socket, &readfds, connectedClients);
   
         // Wait for an activity on one of the sockets
         activity = select(max_fd + 1, &readfds, NULL, NULL, NULL);
@@ -420,32 +487,8 @@ int main(int argc , char *argv[]) {
           
         // IO operation on some of the client's sockets
         for (tmp = connectedClients; tmp != NULL;) {
-            sd = tmp -> fd;
-            if (FD_ISSET(sd , &readfds)) { // Found the client that has activity
-                if ((valread = read( sd , buffer, 1024)) == 0) { // Client disconnected
-                    disconnectClient(&connectedClients, sd);
-                    sprintf(buffer, "> @%s lost connection", tmp -> nick);
-                    sendMessageToAll(connectedClients, buffer);
-                } else { // Client sent a message
-                    buffer[valread] = '\0';
-                    if (!(tmp -> hasNick)) { // Client is trying to login
-                        loginClient(tmp, connectedClients, buffer);
-                    } else {
-                        if (strncmp(buffer, "#quit", 5) == 0) {
-                            disconnectClient(&connectedClients, sd);
-                            sprintf(buffer, "> @%s has left the chat", tmp -> nick);
-                            sendMessageToAll(connectedClients, buffer);
-                        } else if (strncmp(buffer, "#showall", 8) == 0) {
-                            getAllClients(connectedClients, buffer);
-                            sendMessageTo(sd, buffer);
-                        } else if (strncmp(buffer, "@", 1) == 0) {
-                            sendPrivateMessage(tmp, buffer, connectedClients);
-                        } else {
-                            sprintf(auxBuffer, "%s> %s", tmp -> nick, buffer);
-                            sendMessageToAll(connectedClients, auxBuffer);
-                        }
-                    }
-                }
+            if (FD_ISSET(tmp -> fd, &readfds)) { // Found the client that has activity
+                handleClientActivity(tmp, connectedClients);
             }
             tmp = (client*) tmp -> next;
         }
