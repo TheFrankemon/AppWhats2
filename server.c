@@ -16,10 +16,10 @@
  * Struct that defines a client, it also can be used as a client list
  */
 typedef struct {
-  char nick[50];
-  int fd;
-  struct client * next; // Used for dynamic list purposes
-  int hasNick; // Used for client login
+  char nick[50]; // nickname
+  int fd; // file descriptor
+  struct client * next; // used for dynamic list purposes
+  int hasNick; // used for client login
 } client;
 
 /**
@@ -37,13 +37,13 @@ int removeClient(client** list, int fd) {
         return 0;
     }
 
-    if (tmp -> fd == fd) { // client to be removed is te first
+    if (tmp -> fd == fd) { // client to be removed is the first
         *list = (client *) tmp -> next;
         return 1;
     } else {
         for (tmp = *list; tmp -> next != NULL; ) {
             if (((client*)(tmp -> next)) -> fd == fd) { // client has been found
-                tmp -> next = (client *)(((client *)(tmp -> next)) -> next);
+                tmp -> next = ((client *)(tmp -> next)) -> next;
                 return 1;
             }
             tmp = (client*)(tmp->next);
