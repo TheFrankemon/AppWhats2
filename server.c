@@ -1,9 +1,5 @@
-/**
-    Handle multiple socket connections with select and fd_set on Linux   
-    Silver Moon ( m00n.silv3r@gmail.com)
-*/
 #include <stdio.h>
-#include <string.h>   //strlen
+#include <string.h>   //strlen, strncmp, strcpy
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>   //close
@@ -16,84 +12,105 @@
 #define TRUE   1
 #define FALSE  0
 
+/**
+ * Struct that defines a client, it also can be used as a client list
+ */
 typedef struct {
   char nick[50];
-  //struct sockaddr_in sockAddr;
-  int socketFD;
-  struct client * next;
-  int hasNick;
+  int fd;
+  struct client * next; // Used for dynamic list purposes
+  int hasNick; // Used for client login
 } client;
 
+/**
+ * @brief      Removes a client from a given list pointer.
+ *
+ * @param      list  The list
+ * @param[in]  fd    The fd of the client to be removed
+ *
+ * @return     1 if client is removed successfully
+ */
 int removeClient(client** list, int fd) {
     client* tmp = *list;
-    if (tmp == NULL) {
+
+    if (tmp == NULL) { // null list
         return 0;
     }
-    if (tmp -> socketFD == fd) {
-        //tmp = *list;
+
+    if (tmp -> fd == fd) { // client to be removed is te first
         *list = (client *) tmp -> next;
         return 1;
     } else {
         for (tmp = *list; tmp -> next != NULL; ) {
-            //tmp = (client*)(tmp->next);
-            if (((client*)(tmp -> next)) -> socketFD == fd) {
+            if (((client*)(tmp -> next)) -> fd == fd) { // client has been found
                 tmp -> next = (client *)(((client *)(tmp -> next)) -> next);
                 return 1;
             }
-            /*if (tmp -> socketFD == fd) {
-                tmp = (client *) tmp -> next;
-                return 1;
-            }*/
             tmp = (client*)(tmp->next);
         }
     }
-
     return 0;
 }
 
+/**
+ * @brief      Inserts a client to the end of a given list pointer.
+ *
+ * @param      list  The list
+ * @param      elem  The element to be inserted
+ *
+ * @return     1 if elements is inserted successfully
+ */
 int pushClient(client** list, client** elem) {
     client* tmp = NULL;
   
-    if (*elem == NULL) {
-        //printf ("El elemento a insertar es nulo. ");
+    if (*elem == NULL) { // Element to insert is null
         return 0; 
     }
   
-    if (*list == NULL) {
-        //printf ("Se inserta el primer elemento.\n");
+    if (*list == NULL) { // List is empty
         *list = *elem;
         *elem = NULL;
-        //mostrar_punto(**cadena);
+        return 1;
     }
-    else {
-        //printf ("La cadena no esta vacia\n");
-        for (tmp = *list; tmp->next != NULL; ) {
-            tmp = (client*)(tmp->next);
-        }
-        tmp->next = (struct client*) *elem;
-        *elem = NULL;
+
+    for (tmp = *list; tmp->next != NULL; ) { // Gets to the end of the list
+        tmp = (client*)(tmp->next);
     }
+    tmp->next = (struct client*) *elem; // Insert element to the end
+    *elem = NULL;
   
     return 1;
 }
 
+/**
+ * @brief      Closes client's socket and removes it from list
+ *
+ * @param      connectedClients  The connected clients list
+ * @param[in]  sd                Client to the disconnected
+ */
 void disconnectClient(client** connectedClients, int sd) {
     struct sockaddr_in address;
     int addrlen = sizeof(address);
-    getpeername(sd , (struct sockaddr*) &address , (socklen_t*) &addrlen);
+    getpeername(sd , (struct sockaddr*) &address , (socklen_t*) &addrlen); // gets socket info
     printf("Host disconnected , ip %s , port %d \n" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
-      
-    //Close the socket and mark as 0 in list for reuse
+    
     close(sd);
-    //client_socket[i] = 0;
     removeClient(connectedClients, sd);
 }
 
+/**
+ * @brief      Checks if a nickname is already being used.
+ *
+ * @param      list       The client list
+ * @param      newClient  The new client
+ *
+ * @return     1 is nickname is not being used.
+ */
 int checkNickname(client* list, client* newClient) {
     client* tmp = list;
     for (; tmp != NULL; ) {
-        if (tmp -> socketFD != newClient -> socketFD &&
-            strcmp(tmp -> nick, newClient -> nick) == 0) {
+        if (tmp -> fd != newClient -> fd &&
+            strcmp(tmp -> nick, newClient -> nick) == 0) { // Nickname is already being used
             return 0;
         }
         tmp = (client*)(tmp->next);
@@ -101,14 +118,32 @@ int checkNickname(client* list, client* newClient) {
     return 1;
 }
 
+/**
+ * @brief      Sends a message to a given file descriptor socket.
+ *
+ * @param[in]  fd      Socket for the message to be sent
+ * @param      buffer  The message to be sent
+ *
+ * @return     1 if message is successfully sent
+ */
 int sendMessageTo(int fd, char* buffer) {
     if(send(fd, buffer, strlen(buffer), 0) != strlen(buffer)) {
         perror("send");
+        return 0;
     }
 
     return 1;
 }
 
+/**
+ * @brief      Sends a message to all the clients except a given fd
+ *
+ * @param      list    The list of clients
+ * @param      buffer  The message
+ * @param[in]  fd      fd that won't receive the message
+ *
+ * @return     1 if the message is successfully sent
+ */
 int sendMessageToAllExcept(client* list, char* buffer, int fd) {
     client* tmp = list;
 
@@ -117,8 +152,8 @@ int sendMessageToAllExcept(client* list, char* buffer, int fd) {
     }
 
     for (; tmp != NULL; ) {
-        if (tmp -> socketFD != fd) {
-            sendMessageTo(tmp -> socketFD, buffer);
+        if (tmp -> fd != fd) {
+            sendMessageTo(tmp -> fd, buffer);
         }
         tmp = (client*)(tmp->next);
     }
@@ -126,6 +161,14 @@ int sendMessageToAllExcept(client* list, char* buffer, int fd) {
     return 1;
 }
 
+/**
+ * @brief      Sends a message to all the clients
+ *
+ * @param      list    The list of clients
+ * @param      buffer  The message
+ *
+ * @return     1 if the message is successfully sent
+ */
 int sendMessageToAll(client* list, char* buffer) {
     client* tmp = list;
 
@@ -134,27 +177,35 @@ int sendMessageToAll(client* list, char* buffer) {
     }
 
     for (; tmp != NULL; ) {
-        sendMessageTo(tmp -> socketFD, buffer);
+        sendMessageTo(tmp -> fd, buffer);
         tmp = (client*)(tmp->next);
     }
 
     return 1;
 }
 
+/**
+ * @brief      Gets all clients and saves them in the buffer.
+ *
+ * @param      list    The list of clients
+ * @param      buffer  The buffer to save the message
+ *
+ * @return     0 if the list is empty
+ */
 int getAllClients(client* list, char* buffer) {
     char aux[1025];
     client* tmp = list;
     strcpy(buffer, "> Connected users:");
+
     if (tmp == NULL) {
         return 0;
-    } else {
+    } else { // First client
         sprintf(aux, "%s %s", buffer, tmp -> nick);
         strcpy(buffer, aux);
         tmp = (client*)(tmp->next);
     }
-    //aux[strlen(aux)] = '\0';
 
-    while (tmp != NULL) {
+    while (tmp != NULL) { // The rest of the clients separated by a comma
         sprintf(aux, "%s, %s", buffer, tmp -> nick);
         strcpy(buffer, aux);
         tmp = (client*)(tmp->next);
@@ -163,53 +214,19 @@ int getAllClients(client* list, char* buffer) {
     return 1;
 }
 
-int sendCommonMessage(client* from, char* buffer, client* list) {
-    client* tmp = list;
-    char aux[strlen(buffer) + strlen(from -> nick) + 3 + 1];
-
-    sprintf(aux, "%s > %s", from -> nick, buffer);
-    aux[strlen(buffer) + strlen(from -> nick) + 3] = '\0';
-    //strcpy(buffer, aux);
-    //buffer[strlen(aux)] = '\0';
-    //printf("%d\n", strlen(aux));
-
-    sendMessageToAll(list, aux);
-
-    /*client* tmp = list;
-    char aux[1025], temp[75];
-    int curPos = 0;
-
-    strcpy(aux, buffer);
-
-    printf("%d\n", strlen(aux) - curPos);
-
-    while (strlen(aux) - curPos > 74) {
-        memcpy(temp, aux + curPos, 74);
-        temp[74] = '\0';
-        sprintf(buffer, "%s > %s\n", from -> nick, temp);
-        sendMessageToAll(list, buffer);        
-        curPos += 74;
-    }
-
-    sprintf(buffer, "%s > %s", from -> nick, aux + curPos);
-    sendMessageToAll(list, buffer);*/
-    
-    return 1;
-}
-
+/**
+ * @brief      Sends a private message.
+ *
+ * @param      from    The sender
+ * @param      buffer  The message
+ * @param      list    The list clients
+ *
+ * @return     1 if message is successfully sent
+ */
 int sendPrivateMessage(client* from, char* buffer, client* list) {
     client* tmp = list;
-    /*int nickLength = index(buffer, ' ') - 1;
-    char nickTo[nickLength], aux[1025];
-    printf("%s : %d\n", buffer, nickLength);
-    strncpy(nickTo, buffer + 1, nickLength);
-    printf("%s\n", nickTo);
-    //nickTo[nickLength] = '\0';
-    strcpy(aux, buffer + 2 + nickLength);
-    printf("%s -> %s\n", nickTo, aux);
-    sprintf(buffer, "#private %s> %s", from -> nick, aux);*/
 
-    char *newline = strchr(buffer, '\n');
+    char *newline = strchr(buffer, '\n'); // Removes new line characters, to split the message correctly
     if (newline) {
       *newline = 0;
     }
@@ -220,91 +237,155 @@ int sendPrivateMessage(client* from, char* buffer, client* list) {
     nickTo = strtok(buffer + 1, " ");
     strcpy(msg, aux + 1 + strlen(nickTo) + 1);
     sprintf(aux, "#private %s> %s", from -> nick, msg);
-
-    //sprintf(msg, "'%s' -> '%s'\n", nickTo, buffer);
-    //printf("'%s' -> '%s'", nickTo, msg);
-    //printf("ooook\n");
     
-    if (strcmp(from -> nick, nickTo) == 0) {
-        sendMessageTo(from -> socketFD, "> Can't send private messages to yourself");
+    if (strcmp(from -> nick, nickTo) == 0) { // Tried to send a private message to the same user
+        sendMessageTo(from -> fd, "> Can't send private messages to yourself");
         return 0;
     }
 
     while (tmp != NULL) {
-        if (strcmp(tmp -> nick, nickTo) == 0) {
-            sendMessageTo(tmp -> socketFD, aux);
+        if (strcmp(tmp -> nick, nickTo) == 0) { // Client is found
+            sendMessageTo(tmp -> fd, aux);
             return 1;
         }
         tmp = (client*)(tmp->next);
     }
 
     sprintf(aux, "> %s is not connected", nickTo);
-    sendMessageTo(from -> socketFD, aux);
-    return 0;
+    sendMessageTo(from -> fd, aux);
+    return 0; // Client is not found
 }
- 
-int main(int argc , char *argv[]) {
-    //Verify if the server has its defined Port.
-    if (argc != 2) {
+
+/**
+ * @brief      Validates the port given as a parameter
+ *
+ * @param[in]  argc  Number of parameters
+ * @param      argv  Array of strings
+ *
+ * @return     the port
+ */
+int validatePort(int argc, char *argv[]) {
+    int port;
+    char *err;
+
+    if (argc != 2) { // invalid number of arguments
         printf("Must specify the port where the server will listen.\n");
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
-    int PORT = atoi(argv[1]);
+    port = strtol(argv[1], &err, 10);
+    if (err[0] != '\0') { // bad input, not a number
+        printf("Invalid port number\n");
+        exit(EXIT_FAILURE);
+    }
+
+    return port;
+}
+
+/**
+ * @brief      Initialiazes the server socket
+ *
+ * @param[in]  port  The port the server will listen on
+ *
+ * @return     The socket file descriptor
+ */
+int initializeMasterSocket(int port) {
+    int master_socket;
     int opt = TRUE;
-    int master_socket , addrlen , new_socket , client_socket[30] , max_clients = 30 , activity, i , valread , sd;
-    int max_sd;
     struct sockaddr_in address;
 
-    client* connectedClients = NULL;
-    client* tmp;
-      
-    char buffer[1025];  //data buffer of 1K
-    char auxBuffer[1025];
-
-    auxBuffer[0] = '\0';
-
-    //set of socket descriptors
-    fd_set readfds;
-  
-    //initialise all client_socket[] to 0 so not checked
-    /*for (i = 0; i < max_clients; i++) {
-        client_socket[i] = 0;
-    }*/
-      
-    //create a master socket
+    // creates a master socket
     if( (master_socket = socket(AF_INET , SOCK_STREAM , 0)) == 0) {
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
-  
-    //set master socket to allow multiple connections , this is just a good habit, it will work without this
+
+    // sets master socket to allow multiple connections
     if( setsockopt(master_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0 ) {
         perror("setsockopt");
         exit(EXIT_FAILURE);
     }
-  
+
     //type of socket created
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons( PORT );
+    address.sin_port = htons( port );
       
     //bind the socket to a defined port
     if (bind(master_socket, (struct sockaddr *)&address, sizeof(address))<0) {
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
-    printf("Listener on port %d \n", PORT);
-     
+    printf("Listening on port %d \n", port);
+
     //try to specify maximum of 3 pending connections for the master socket
     if (listen(master_socket, 3) < 0) {
         perror("listen");
         exit(EXIT_FAILURE);
     }
-      
-    //accept the incoming connection
-    addrlen = sizeof(address);
+
     puts("AppWhats2 chat server started... Waiting for connections...");
+
+    return master_socket;
+}
+
+/**
+ * @brief      Connects a new client.
+ *
+ * @param[in]  master_socket  The server socket fd
+ * @param      list        The list of clients
+ *
+ * @return     1 if client is connected successfully
+ */
+int connectClient(int master_socket, client** list) {
+    int new_socket;
+    int addrlen;
+    struct sockaddr_in address;
+
+    if ((new_socket = accept(master_socket, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+        perror("accept");
+        exit(EXIT_FAILURE);
+    }
+  
+    printf("New connection , socket fd is %d , ip is : %s , port : %d \n" , new_socket , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
+
+    client* newClient = (client*) malloc(sizeof(client));
+    newClient -> fd = new_socket;
+    newClient -> next = NULL;
+    newClient -> hasNick = 0;
+    return pushClient(list, &newClient);
+}
+
+void loginClient(client* tmp, client* list, char* buffer) {
+    strcpy(tmp -> nick, buffer);
+    if (checkNickname(list, tmp)) {
+        printf("%s has connected\n", tmp -> nick);
+        sprintf(buffer, "> @%s has joined the chat", tmp -> nick);
+        sendMessageTo(tmp -> fd, "Welcome!");
+        sendMessageToAllExcept(list, buffer, tmp -> fd);
+        tmp -> hasNick = 1;
+    } else {
+        sprintf(buffer, "Sorry '%s' is already connected, please change nickname and retry...", tmp -> nick);
+        sendMessageTo(tmp -> fd, buffer);
+    }
+}
+ 
+int main(int argc , char *argv[]) {
+    int port; // port the server will listen on
+    int master_socket; // server socket
+    int activity, valread; // used for select
+    int max_fd, sd; // file descriptors
+
+    client* connectedClients = NULL; // list of clients
+    client* tmp; // auxiliary client to iterate on the list
+      
+    char buffer[1025];  // data buffer of 1K
+    char auxBuffer[1025]; // auxiliary buffer for string operations
+
+    fd_set readfds; //set of socket descriptors
+    
+    port = validatePort(argc, argv);
+    master_socket = initializeMasterSocket(port);
      
     while(TRUE) {
         //clear the socket set
@@ -312,125 +393,56 @@ int main(int argc , char *argv[]) {
   
         //add master socket to set
         FD_SET(master_socket, &readfds);
-        max_sd = master_socket;
+        max_fd = master_socket;
          
         //add child sockets to set
-        for (tmp = connectedClients; tmp != NULL;) {
-            sd = tmp -> socketFD;
+        for (tmp = connectedClients; tmp != NULL; tmp = (client*) tmp -> next) {
+            sd = tmp -> fd;
             if(sd > 0) {
                 FD_SET( sd , &readfds);
             }
-            if(sd > max_sd) {
-                max_sd = sd;
+            if(sd > max_fd) {
+                max_fd = sd;
             }
-
-            tmp = (client*) tmp -> next;
-        }        
-        /*for ( i = 0 ; i < max_clients ; i++) {
-            //socket descriptor
-            sd = client_socket[i];
-             
-            //if valid socket descriptor then add to read list
-            if(sd > 0)
-                FD_SET( sd , &readfds);
-             
-            //highest file descriptor number, need it for the select function
-            if(sd > max_sd)
-                max_sd = sd;
-        }*/
+        }
   
-        //wait for an activity on one of the sockets , timeout is NULL , so wait indefinitely
-        activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
+        // Wait for an activity on one of the sockets
+        activity = select(max_fd + 1, &readfds, NULL, NULL, NULL);
     
         if ((activity < 0) && (errno!=EINTR)) {
             printf("select error");
         }
           
-        //If something happened on the master socket , then its an incoming connection
+        // Incoming client connection
         if (FD_ISSET(master_socket, &readfds)) {
-            if ((new_socket = accept(master_socket, (struct sockaddr *)&address, (socklen_t*)&addrlen))<0) {
-                perror("accept");
-                exit(EXIT_FAILURE);
-            }
-          
-            //inform user of socket number - used in send and receive commands
-            printf("New connection , socket fd is %d , ip is : %s , port : %d \n" , new_socket , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
-            
-            //add new socket to array of sockets
-            /*for (i = 0; i < max_clients; i++) {
-                //if position is empty
-                if( client_socket[i] == 0 ) {
-                    client_socket[i] = new_socket;
-                    printf("Adding to list of sockets as %d\n" , i);
-                     
-                    break;
-                }
-            }*/
-            client* newClient = (client*) malloc(sizeof(client));
-            newClient -> socketFD = new_socket;
-            newClient -> next = NULL;
-            newClient -> hasNick = 0;
-            pushClient(&connectedClients, &newClient);
+            connectClient(master_socket, &connectedClients);
         }
           
-        //else its some IO operation on some other socket :)
-        //for (i = 0; i < max_clients; i++) {
-          //  sd = client_socket[i];
+        // IO operation on some of the client's sockets
         for (tmp = connectedClients; tmp != NULL;) {
-            sd = tmp -> socketFD;
-            if (FD_ISSET( sd , &readfds)) {
-                //Check if it was for closing , and also read the incoming message
-                if ((valread = read( sd , buffer, 1024)) == 0) {
-                    //Somebody disconnected , get his details and print
-                    /*getpeername(sd , (struct sockaddr*)&address , (socklen_t*)&addrlen);
-                    printf("Host disconnected , ip %s , port %d \n" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
-                      
-                    //Close the socket and mark as 0 in list for reuse
-                    close(sd);
-                    //client_socket[i] = 0;
-                    removeClient(&connectedClients, sd);*/
+            sd = tmp -> fd;
+            if (FD_ISSET(sd , &readfds)) { // Found the client that has activity
+                if ((valread = read( sd , buffer, 1024)) == 0) { // Client disconnected
                     disconnectClient(&connectedClients, sd);
                     sprintf(buffer, "> @%s lost connection", tmp -> nick);
                     sendMessageToAll(connectedClients, buffer);
-                } else { //Echo back the message that came in
-                    //set the string terminating NULL byte on the end of the data read
+                } else { // Client sent a message
                     buffer[valread] = '\0';
-                    printf("%s\n", buffer);
-                    //send(sd , buffer , strlen(buffer) , 0 );
-                    if (!(tmp -> hasNick)) {
-                        strcpy(tmp -> nick, buffer);
-                        if (checkNickname(connectedClients, tmp)) {
-                            printf("%s has connected\n", tmp -> nick);
-                            sprintf(buffer, "> @%s has joined the chat", tmp -> nick);
-                            sendMessageTo(sd, "Welcome!");
-                            sendMessageToAllExcept(connectedClients, buffer, sd);
-                            tmp -> hasNick = 1;
-                        } else {
-                            sprintf(buffer, "Sorry '%s' is already connected, please change nickname and retry...", tmp -> nick);
-                            sendMessageTo(sd, buffer);
-                            //sprintf(buffer, "Sorry '%s' is already connected, please change nickname and retry...", buffer);
-                            //disconnectClient(&connectedClients, sd);
-                        }                        
+                    if (!(tmp -> hasNick)) { // Client is trying to login
+                        loginClient(tmp, connectedClients, buffer);
                     } else {
                         if (strncmp(buffer, "#quit", 5) == 0) {
-                        //if (strcmp(buffer, "#quit") == 0) {
                             disconnectClient(&connectedClients, sd);
                             sprintf(buffer, "> @%s has left the chat", tmp -> nick);
                             sendMessageToAll(connectedClients, buffer);
                         } else if (strncmp(buffer, "#showall", 8) == 0) {
-                        //} else if (strcmp(buffer, "#showall") == 0) {
                             getAllClients(connectedClients, buffer);
                             sendMessageTo(sd, buffer);
                         } else if (strncmp(buffer, "@", 1) == 0) {
                             sendPrivateMessage(tmp, buffer, connectedClients);
                         } else {
-                            //sprintf(auxBuffer, "%s> %s", tmp -> nick, buffer);
-                            //auxBuffer[strlen(tmp -> nick) + strlen(buffer) + 2] = '\0';
-                            //strncpy(auxBuffer, buffer, strlen(buffer));
-                            //sprintf(buffer, " %s> %s ", tmp -> nick, auxBuffer);
-                            //printf("%d\n", strlen(auxBuffer));
-                            //sendMessageToAll(connectedClients, buffer);
-                            sendCommonMessage(tmp, buffer, connectedClients);
+                            sprintf(auxBuffer, "%s> %s", tmp -> nick, buffer);
+                            sendMessageToAll(connectedClients, auxBuffer);
                         }
                     }
                 }
