@@ -16,10 +16,25 @@
 #define STDIN 0
 
 char nameTemp[160];
-char array[18][1025], pos = 0;
+/**
+ * Array of 17 slots, saves the last sent messages (discards the older ones)
+ */
+char msgsCache[17][1025];
+char pos = 0;
+/**
+ * 2 windows inside the UI, one of top of the other.
+ * write_win shows the messages saved on server.
+ * read_win shows a "text box" for the user input.
+ */
 WINDOW* write_win;
 WINDOW* read_win;
 
+/**
+ * @brief      Validates the program recieves both server IP and server Port.
+ *
+ * @param[in]  argc  Number of parameters
+ * @param      argv  Array of strings
+ */
 void validateArgs(int argc, char *argv[]) {
 	if (argc != 3) {
 		perror("error: must give 2 params (server_ip server_port)");
@@ -27,6 +42,9 @@ void validateArgs(int argc, char *argv[]) {
 	}
 }
 
+/**
+ * @brief      Draws the program's splash screen.
+ */
 void drawLogo() {
 	attron(COLOR_PAIR(1));
 
@@ -43,6 +61,9 @@ void drawLogo() {
 	attroff(COLOR_PAIR(1));
 }
 
+/**
+ * @brief      Draws/repaints the window that shows the messages.
+ */
 void paintReadWindow() {
 	attron(COLOR_PAIR(2));
 	wborder(read_win, '<', '>', '^','-','*','*','*','*');
@@ -52,66 +73,81 @@ void paintReadWindow() {
 	move(21, 3);
 }
 
+/**
+ * @brief      Draws/repaints the window that gets the user input.
+ */
 void paintWriteWindow() {
 	attron(COLOR_PAIR(2));
 	wborder(write_win, '<', '>', '-','v','*','*','*','*');
 	wbkgd(write_win, COLOR_PAIR(2));
 	attroff(COLOR_PAIR(2));
-	attron(COLOR_PAIR(1)); //Black background for user writing.
+	attron(COLOR_PAIR(1));					//Draws a black "text box".
 	mvprintw(21, 1, "                                                                              ");
 	mvprintw(22, 1, "                                                                              ");
 	attroff(COLOR_PAIR(1));
 	move(21, 3);
 }
 
+/**
+ * @brief      Deletes the oldest message to make space for the newest.
+ */
 void scrollBuffer() {
 	for (int c = 0 ; c < 17 ; c++ ) {
-		strcpy(array[c], array[c + 1]);
+		strcpy(msgsCache[c], msgsCache[c + 1]);
 	}
 	pos = 16;
 }
 
+/**
+ * @brief      Verifies that msgsCache is not overflown.
+ * 				Adds the newest message to the msgsCache, and then prints its contents.
+ * 				Changes color to the server-sent messages.
+ *
+ * @param      msg   The message that was just written.
+ */
 void printBuffer(char *msg) {
 	if (pos > 16) {
 		scrollBuffer();
 	}
 
-	strcpy(array[pos], msg);
+	strcpy(msgsCache[pos], msg);
 	pos++;
 
 	for(int c = 0 ; c < pos ; c++ ) {
-		if (strncmp(array[c], ">", 1) == 0) {
+		if (strncmp(msgsCache[c], ">", 1) == 0) {
 			attron(COLOR_PAIR(3));
 		}
-		mvprintw(2 + c, 5, array[c]);
+		mvprintw(2 + c, 5, msgsCache[c]);
 		attroff(COLOR_PAIR(3));
 	}
 }
 
 int main(int argc , char *argv[])
 {
-	char *serverIP = argv[1], *err;
+	char *serverIP = argv[1], *err;		//saves the server's IP
 	struct sockaddr_in stSockAddr;
-	int activity, valread, max_sd;
-	char buffer[1025];  //data buffer of 1K
-	fd_set readfds; 	//set of socket descriptors
+	int activity, valread, max_sd;		//used for select
+	char buffer[1025];  				//data buffer of 1K
+	fd_set readfds; 					//set of socket descriptors
 	
 	validateArgs(argc, argv);
 	
-	int serverPort = strtol(argv[2], &err, 10); // converts port string to int
-    if (err[0] != '\0') { // bad input, not a number
+	int serverPort = strtol(argv[2], &err, 10); 	// converts port string to int
+    if (err[0] != '\0') { 							// bad input, not a number
     	perror("error: char string (invalid port)");
     	exit(EXIT_FAILURE);
     }
 
-	int socketFD = socket(AF_INET, SOCK_STREAM, 0);// IPPROTO_TCP);
+    // creates a socket for the server connection
+	int socketFD = socket(AF_INET, SOCK_STREAM, 0);	// IPPROTO_TCP);
 	if (-1 == socketFD) {
 		perror("cannot create socket");
 		exit(EXIT_FAILURE);
 	}
 
-	memset(&stSockAddr, 0, sizeof(struct sockaddr_in));
+	memset(&stSockAddr, 0, sizeof(struct sockaddr_in));		//Saves a space in memory for the socket
 
+    //type of socket created
 	stSockAddr.sin_family = AF_INET;
 	stSockAddr.sin_port = htons(serverPort);
 	int res = inet_pton(AF_INET, serverIP, &stSockAddr.sin_addr);
@@ -140,6 +176,7 @@ int main(int argc , char *argv[])
 	initscr();
 	raw();
 	start_color();
+	//Defines the color palette with 3 flavors.
 	init_pair(1, COLOR_GREEN, COLOR_BLACK);
 	init_pair(2, COLOR_BLACK, COLOR_GREEN);
 	init_pair(3, COLOR_YELLOW, COLOR_BLACK);
@@ -147,10 +184,11 @@ int main(int argc , char *argv[])
 
 	system("/bin/stty raw"); 				//Kills buffering
 
+	//Waits for the user's nickname to continue
 	while(1) {
 		FD_ZERO(&readfds);					//clear the socket set
 		FD_SET(socketFD, &readfds);			//add server socket to set
-		FD_SET(STDIN, &readfds);
+		FD_SET(STDIN, &readfds);			//add socket for user input
 
 		refresh();
 		activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
@@ -182,6 +220,7 @@ int main(int argc , char *argv[])
 		}
 	}
 
+	//If everything is OK, then "open" the chat UI.
 	read_win = newwin(21, 80, 0, 0);
 	write_win = newwin(4, 80, 20, 0);
 	paintReadWindow();
@@ -193,6 +232,7 @@ int main(int argc , char *argv[])
 	move(21, 3);
 	system("/bin/stty raw");
 
+	//Waits continously for the user's input messages to be sent to the server.
 	while(1) {
 		FD_ZERO(&readfds);
 		FD_SET(socketFD, &readfds);
