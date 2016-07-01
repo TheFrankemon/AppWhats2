@@ -35,11 +35,20 @@ WINDOW* read_win;
  * @param[in]  argc  Number of parameters
  * @param      argv  Array of strings
  */
-void validateArgs(int argc, char *argv[]) {
+int validatePort(int argc, char *argv[]) {
 	if (argc != 3) {
 		perror("error: must give 2 params (server_ip server_port)");
 		exit(EXIT_FAILURE);
 	}
+
+	char *err;
+	int serverPort = strtol(argv[2], &err, 10); 	// converts port string to int
+    if (err[0] != '\0') { 							// bad input, not a number
+    	perror("error: char string (invalid port)");
+    	exit(EXIT_FAILURE);
+    }
+
+    return serverPort;
 }
 
 /**
@@ -98,6 +107,19 @@ void scrollBuffer() {
 	pos = 16;
 }
 
+void initializeUI() {
+	initscr();
+	raw();
+	start_color();
+	//Defines the color palette with 4 flavors.
+	init_pair(1, COLOR_GREEN, COLOR_BLACK);
+	init_pair(2, COLOR_BLACK, COLOR_GREEN);
+	init_pair(3, COLOR_YELLOW, COLOR_BLACK);
+	init_pair(4, COLOR_RED, COLOR_BLACK);
+	drawLogo();
+	system("/bin/stty raw"); 				//Kills buffering
+}
+
 /**
  * @brief      Verifies that msgsCache is not overflown.
  * 				Adds the newest message to the msgsCache, and then prints its contents.
@@ -116,30 +138,22 @@ void printBuffer(char *msg) {
 	for(int c = 0 ; c < pos ; c++ ) {
 		if (strncmp(msgsCache[c], ">", 1) == 0) {
 			attron(COLOR_PAIR(3));
+			mvprintw(2 + c, 5, msgsCache[c]);
+			attroff(COLOR_PAIR(3));
+		} else if (strncmp(msgsCache[c], "#", 1) == 0) {
+			attron(COLOR_PAIR(4));
+			mvprintw(2 + c, 5, msgsCache[c]);
+			attroff(COLOR_PAIR(4));
+		} else {
+			mvprintw(2 + c, 5, msgsCache[c]);
 		}
-		mvprintw(2 + c, 5, msgsCache[c]);
-		attroff(COLOR_PAIR(3));
 	}
 }
 
-int main(int argc , char *argv[])
-{
-	char *serverIP = argv[1], *err;		//saves the server's IP
+int initializeSocket(int serverPort, char *serverIP) {
+	int socketFD = socket(AF_INET, SOCK_STREAM, 0);
 	struct sockaddr_in stSockAddr;
-	int activity, valread, max_sd;		//used for select
-	char buffer[1025];  				//data buffer of 1K
-	fd_set readfds; 					//set of socket descriptors
-	
-	validateArgs(argc, argv);
-	
-	int serverPort = strtol(argv[2], &err, 10); 	// converts port string to int
-    if (err[0] != '\0') { 							// bad input, not a number
-    	perror("error: char string (invalid port)");
-    	exit(EXIT_FAILURE);
-    }
 
-    // creates a socket for the server connection
-	int socketFD = socket(AF_INET, SOCK_STREAM, 0);	// IPPROTO_TCP);
 	if (-1 == socketFD) {
 		perror("cannot create socket");
 		exit(EXIT_FAILURE);
@@ -170,22 +184,80 @@ int main(int argc , char *argv[])
 
 	printf("Connecting to %s:%d\n", serverIP, serverPort);
 
-	//calculates max file descriptor
-	max_sd = (socketFD > STDIN) ? socketFD : STDIN;
+	return socketFD;
+}
 
-	initscr();
-	raw();
-	start_color();
-	//Defines the color palette with 3 flavors.
-	init_pair(1, COLOR_GREEN, COLOR_BLACK);
-	init_pair(2, COLOR_BLACK, COLOR_GREEN);
-	init_pair(3, COLOR_YELLOW, COLOR_BLACK);
-	drawLogo();
+void receiveMessage(int socketFD) {
+	char buffer[1025];
+	int valread;
 
-	system("/bin/stty raw"); 				//Kills buffering
+	valread = read(socketFD, buffer, 1024);
+	buffer[valread] = '\0';
+	if (valread == 0) {
+		endwin();
+		exit(EXIT_SUCCESS);
+	} else {
+		paintReadWindow();
+		printBuffer(buffer);
+		wrefresh(read_win);
+	}
+}
+
+int login(int socketFD) {
+	char buffer[1025];
+	int valread;
+
+	valread = read(socketFD, buffer, 1024);
+	buffer[valread] = '\0';
+	if (valread == 0) {
+		endwin();
+		exit(EXIT_SUCCESS);
+	} else {
+		if (strncmp(buffer, "Welcome!", 8) == 0) {
+			return 1;
+		}
+		mvprintw(23, 8, buffer);
+	}
+
+	return 0;
+}
+
+void writeNickname(int socketFD) {
+	char buffer[1025];
+	move(20,49);
+	getstr(buffer);
+	send(socketFD, buffer , strlen(buffer), 0);
+	refresh();
+}
+
+void writeMessage(int socketFD) {
+	char buffer[1025];
+	move(21, 3);
+	getstr(buffer);
+	send(socketFD, buffer , strlen(buffer), 0);
+	paintWriteWindow();
+	refresh();
+}
+
+void openChatUI() {
+	read_win = newwin(21, 80, 0, 0);
+	write_win = newwin(4, 80, 20, 0);
+	paintReadWindow();
+	paintWriteWindow();
+	wrefresh(read_win);
+	wrefresh(write_win);
+	echo();
+	nocbreak();
+	move(21, 3);
+	system("/bin/stty raw");
+}
+
+void waitLogin(int socketFD, int max_sd, fd_set readfds) {
+	int isLogged = 0;
+	int activity;
 
 	//Waits for the user's nickname to continue
-	while(1) {
+	while(!isLogged) {
 		FD_ZERO(&readfds);					//clear the socket set
 		FD_SET(socketFD, &readfds);			//add server socket to set
 		FD_SET(STDIN, &readfds);			//add socket for user input
@@ -199,40 +271,18 @@ int main(int argc , char *argv[])
 		
 		//Server activity
 		if (FD_ISSET(socketFD, &readfds)) {
-			valread = read(socketFD, buffer, 1024);
-			buffer[valread] = '\0';
-			if (valread == 0) {
-				endwin();
-				exit(EXIT_SUCCESS);
-			} else {
-				if (strncmp(buffer, "Welcome!", 8) == 0) {
-					break;
-				}
-				mvprintw(23, 8, buffer);
-			}
+			isLogged = login(socketFD);
 		}
 		
 		//STDIN activity
 		if (FD_ISSET(STDIN, &readfds)) {
-			getstr(buffer);
-			send(socketFD, buffer , strlen(buffer), 0);
-			refresh();
+			writeNickname(socketFD);
 		}
 	}
+}
 
-	//If everything is OK, then "open" the chat UI.
-	read_win = newwin(21, 80, 0, 0);
-	write_win = newwin(4, 80, 20, 0);
-	paintReadWindow();
-	paintWriteWindow();
-	wrefresh(read_win);
-	wrefresh(write_win);
-	echo();
-	nocbreak();
-	move(21, 3);
-	system("/bin/stty raw");
-
-	//Waits continously for the user's input messages to be sent to the server.
+void startChatting(int socketFD, int max_sd, fd_set readfds) {
+	int activity;
 	while(1) {
 		FD_ZERO(&readfds);
 		FD_SET(socketFD, &readfds);
@@ -246,27 +296,35 @@ int main(int argc , char *argv[])
 			
 		//Server activity
 		if (FD_ISSET(socketFD, &readfds)) {
-			valread = read(socketFD, buffer, 1024);
-			buffer[valread] = '\0';
-			if (valread == 0) {
-				endwin();
-				exit(EXIT_SUCCESS);
-			} else {
-				paintReadWindow();
-				printBuffer(buffer);
-				wrefresh(read_win);
-			}
+			receiveMessage(socketFD);
 		}
 		
 		//STDIN activity
 		if (FD_ISSET(STDIN, &readfds)) {
-			move(21, 3);
-			getstr(buffer);
-			send(socketFD, buffer , strlen(buffer), 0);
-			paintWriteWindow();
-			refresh();
+			writeMessage(socketFD);
 		}
 	}
+}
+
+int main(int argc , char *argv[])
+{
+	char *serverIP = argv[1];		//saves the server's IP
+	int max_sd;		//used for select
+	fd_set readfds; 					//set of socket descriptors
+	int serverPort, socketFD;
+	
+	serverPort = validatePort(argc, argv);
+	socketFD = initializeSocket(serverPort, serverIP);
+	max_sd = (socketFD > STDIN) ? socketFD : STDIN;
+
+	initializeUI();
+
+	waitLogin(socketFD, max_sd, readfds);
+
+	//If everything is logged, then "open" the chat UI.
+	openChatUI();
+
+	startChatting(socketFD, max_sd, readfds);
 
 	endwin();
 	exit(EXIT_FAILURE);
