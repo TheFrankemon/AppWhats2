@@ -38,15 +38,15 @@ int removeClient(client** list, int fd) {
     }
 
     if (tmp -> fd == fd) { // client to be removed is the first
-        *list = (client *) tmp -> next;
+        *list = (client*)(tmp->next);
+        tmp->next = NULL;
         return 1;
     } else {
-        for (tmp = *list; tmp -> next != NULL; ) {
+        for (tmp = *list; tmp -> next != NULL; tmp = (client*)(tmp->next)) {
             if (((client*)(tmp -> next)) -> fd == fd) { // client has been found
                 tmp -> next = ((client *)(tmp -> next)) -> next;
                 return 1;
             }
-            tmp = (client*)(tmp->next);
         }
     }
     return 0;
@@ -354,9 +354,9 @@ int cleanSocketFDSet(int master_socket, fd_set* readfds, client* connectedClient
     //add master socket to set
     FD_SET(master_socket, readfds);
     max_fd = master_socket;
-     
+
     //add child sockets to set
-    for (client* tmp = connectedClients; tmp != NULL; tmp = (client*) tmp -> next) {
+    for (client* tmp = connectedClients; tmp != NULL; tmp = (client*)(tmp -> next)) {
         sd = tmp -> fd;
         if(sd > 0) {
             FD_SET(sd, readfds);
@@ -382,7 +382,7 @@ int connectClient(int master_socket, client** list) {
     struct sockaddr_in address;
     int addrlen = sizeof(address);
 
-    if ((new_socket = accept(master_socket, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+    if ((new_socket = accept(master_socket, (struct sockaddr *)&address, &addrlen)) < 0) {
         perror("accept");
         exit(EXIT_FAILURE);
     }
@@ -471,6 +471,9 @@ int main(int argc , char *argv[]) {
     master_socket = initializeMasterSocket(port);
      
     while(TRUE) {
+        for (client* aux = connectedClients; aux != NULL; aux = (client*) (aux -> next)) {
+            printf("User %d\n", aux -> fd);
+        }
         max_fd = cleanSocketFDSet(master_socket, &readfds, connectedClients);
   
         // Wait for an activity on one of the sockets
