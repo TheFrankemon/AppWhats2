@@ -70,7 +70,7 @@ void paintReadWindow() {
 	wbkgd(read_win, COLOR_PAIR(2));
 	mvprintw(0, 14, "== AppWhats 2 TM - Just plain chatting, literally ==");
 	attroff(COLOR_PAIR(2));
-	move(21, 3);
+	mvprintw(21, 3, ">> ");
 }
 
 /**
@@ -85,7 +85,7 @@ void paintWriteWindow() {
 	mvprintw(21, 1, "                                                                              ");
 	mvprintw(22, 1, "                                                                              ");
 	attroff(COLOR_PAIR(1));
-	move(21, 3);
+	mvprintw(21, 3, ">> ");
 }
 
 /**
@@ -229,7 +229,7 @@ int main(int argc , char *argv[])
 	wrefresh(write_win);
 	echo();
 	nocbreak();
-	move(21, 3);
+	mvprintw(21, 3, ">> ");
 	system("/bin/stty raw");
 
 	//Waits continously for the user's input messages to be sent to the server.
@@ -260,7 +260,7 @@ int main(int argc , char *argv[])
 		
 		//STDIN activity
 		if (FD_ISSET(STDIN, &readfds)) {
-			move(21, 3);
+			mvprintw(21, 3, ">> ");
 			getstr(buffer);
 			send(socketFD, buffer , strlen(buffer), 0);
 			paintWriteWindow();
