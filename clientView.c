@@ -20,6 +20,13 @@ char array[18][1025], pos = 0;
 WINDOW* write_win;
 WINDOW* read_win;
 
+void validateArgs(int argc, char *argv[]) {
+	if (argc != 3) {
+		perror("error: must give 2 params (server_ip server_port)");
+		exit(EXIT_FAILURE);
+	}
+}
+
 void drawLogo() {
 	attron(COLOR_PAIR(1));
 
@@ -34,36 +41,6 @@ void drawLogo() {
 
 	mvprintw(20, 24, "'Allo, 'allo, my name is ");
 	attroff(COLOR_PAIR(1));
-}
-
-void scrollBuffer() {
-	for (int c = 0 ; c < 17 ; c++ ) {
-		strcpy(array[c], array[c + 1]);
-	}
-	pos = 16;
-}
-
-void printBuffer(char *msg) {
-	if (pos > 16) {
-		scrollBuffer();
-	}
-
-	strcpy(array[pos], msg);
-	pos++;
-
-/*
-	int len = strlen( array[0] );
-	for (int i = 0; i < len; i++) {
-			mvprintw(15, 30, &array[0][i]);
-		if (strcmp(&array[0][i],">") == 0) {
-			attron(COLOR_PAIR(1));
-		}
-		mvprintw(20, 20, array[0]);
-	}
-*/
-	for(int c = 0 ; c < pos ; c++ ) {
-		mvprintw(2 + c, 5, array[c]);
-	}
 }
 
 void paintReadWindow() {
@@ -87,10 +64,27 @@ void paintWriteWindow() {
 	move(21, 3);
 }
 
-void validateArgs(int argc, char *argv[]) {
-	if (argc != 3) {
-		perror("error: must give 2 params (server_ip server_port)");
-		exit(EXIT_FAILURE);
+void scrollBuffer() {
+	for (int c = 0 ; c < 17 ; c++ ) {
+		strcpy(array[c], array[c + 1]);
+	}
+	pos = 16;
+}
+
+void printBuffer(char *msg) {
+	if (pos > 16) {
+		scrollBuffer();
+	}
+
+	strcpy(array[pos], msg);
+	pos++;
+
+	for(int c = 0 ; c < pos ; c++ ) {
+		if (strncmp(array[c], ">", 1) == 0) {
+			attron(COLOR_PAIR(3));
+		}
+		mvprintw(2 + c, 5, array[c]);
+		attroff(COLOR_PAIR(3));
 	}
 }
 
@@ -148,6 +142,7 @@ int main(int argc , char *argv[])
 	start_color();
 	init_pair(1, COLOR_GREEN, COLOR_BLACK);
 	init_pair(2, COLOR_BLACK, COLOR_GREEN);
+	init_pair(3, COLOR_YELLOW, COLOR_BLACK);
 	drawLogo();
 
 	system("/bin/stty raw"); 				//Kills buffering
