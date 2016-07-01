@@ -345,7 +345,7 @@ int initializeMasterSocket(int port) {
  *
  * @return     the max file descriptor
  */
-int cleanSocketSet(int master_socket, fd_set* readfds, client* connectedClients) {
+int cleanSocketFDSet(int master_socket, fd_set* readfds, client* connectedClients) {
     int sd, max_fd;
 
     //clear the socket set
@@ -471,7 +471,7 @@ int main(int argc , char *argv[]) {
     master_socket = initializeMasterSocket(port);
      
     while(TRUE) {
-        max_fd = cleanSocketSet(master_socket, &readfds, connectedClients);
+        max_fd = cleanSocketFDSet(master_socket, &readfds, connectedClients);
   
         // Wait for an activity on one of the sockets
         activity = select(max_fd + 1, &readfds, NULL, NULL, NULL);
