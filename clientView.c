@@ -17,10 +17,12 @@
 
 char nameTemp[160];
 char array[18][1025], pos = 0;
-WINDOW* local_win;
-WINDOW* top_win;
+WINDOW* write_win;
+WINDOW* read_win;
 
 void drawLogo() {
+	attron(COLOR_PAIR(1));
+
 	mvprintw(8,8,"        /\\            \\            / /        /       #######");
 	mvprintw(9,8,"       /  \\            \\          / /       _/_          ### ");
 	mvprintw(10,8,"      /____\\    ___ ___ \\        / /__  __  /  ____  ######  ");
@@ -28,55 +30,60 @@ void drawLogo() {
 	mvprintw(12,8,"    /        \\/__//__/    \\/  \\/ /  / /_/ /_ __/   #######   ");
 	mvprintw(13,8,"             /   /                                           ");
 	mvprintw(14,8,"____________/   /____________________________________________");
-	mvprintw(15,7,"__________ENTER YOUR NAME TO CHAT LIKE A REAL DEV :v___________");
+	mvprintw(15,7,"_________________IT'S TIME TO CHAT LIKE A REAL DEV :v___________");
+
+	mvprintw(20, 24, "'Allo, 'allo, my name is ");
+	attroff(COLOR_PAIR(1));
 }
- 
 
 void scrollBuffer() {
-	for (int c = 0 ; c < 18 ; c++ ) {
+	for (int c = 0 ; c < 17 ; c++ ) {
 		strcpy(array[c], array[c + 1]);
 	}
-	pos = 17;
+	pos = 16;
 }
 
 void printBuffer(char *msg) {
-	if (pos > 17) {
+	if (pos > 16) {
 		scrollBuffer();
 	}
 
 	strcpy(array[pos], msg);
 	pos++;
 
+/*
+	int len = strlen( array[0] );
+	for (int i = 0; i < len; i++) {
+			mvprintw(15, 30, &array[0][i]);
+		if (strcmp(&array[0][i],">") == 0) {
+			attron(COLOR_PAIR(1));
+		}
+		mvprintw(20, 20, array[0]);
+	}
+*/
 	for(int c = 0 ; c < pos ; c++ ) {
 		mvprintw(2 + c, 5, array[c]);
 	}
 }
 
-void clearBottom() {
+void paintReadWindow() {
+	attron(COLOR_PAIR(2));
+	wborder(read_win, '<', '>', '^','-','*','*','*','*');
+	wbkgd(read_win, COLOR_PAIR(2));
+	mvprintw(0, 14, "== AppWhats 2 TM - Just plain chatting, literally ==");
+	attroff(COLOR_PAIR(2));
+	move(21, 3);
+}
+
+void paintWriteWindow() {
+	attron(COLOR_PAIR(2));
+	wborder(write_win, '<', '>', '-','v','*','*','*','*');
+	wbkgd(write_win, COLOR_PAIR(2));
+	attroff(COLOR_PAIR(2));
 	attron(COLOR_PAIR(1)); //Black background for user writing.
 	mvprintw(21, 1, "                                                                              ");
 	mvprintw(22, 1, "                                                                              ");
 	attroff(COLOR_PAIR(1));
-	move(21, 3);
-}
-
-void drawTopGreen() {
-	attron(COLOR_PAIR(2));
-	wborder(top_win, '<', '>', '^','v','*','*','*','*'); //Draw interface
-	wbkgd(top_win, COLOR_PAIR(2));
-	mvprintw(0, 14, "== AppWhats 2 TM - Just plain chatting, literally =="); //Draws title
-	mvprintw(20, 1, "==============================================================================");
-	attroff(COLOR_PAIR(2));
-	move(21, 3);
-}
-
-void drawGreen() {
-	attron(COLOR_PAIR(2));
-	wborder(local_win, '<', '>', '^','v','*','*','*','*'); //Draw interface
-	wbkgd(local_win, COLOR_PAIR(2));
-	mvprintw(0, 14, "== AppWhats 2 TM - Just plain chatting, literally =="); //Draws title
-	mvprintw(20, 1, "==============================================================================");
-	attroff(COLOR_PAIR(2));
 	move(21, 3);
 }
 
@@ -89,13 +96,14 @@ void validateArgs(int argc, char *argv[]) {
 
 int main(int argc , char *argv[])
 {
+	char *serverIP = argv[1], *err;
+	struct sockaddr_in stSockAddr;
+	int activity, valread, max_sd;
+	char buffer[1025];  //data buffer of 1K
+	fd_set readfds; 	//set of socket descriptors
+	
 	validateArgs(argc, argv);
-
-	int hasNick = 0;
 	
-	char *serverIP = argv[1];
-	
-	char *err;
 	int serverPort = strtol(argv[2], &err, 10); // converts port string to int
     if (err[0] != '\0') { // bad input, not a number
     	perror("error: char string (invalid port)");
@@ -108,27 +116,17 @@ int main(int argc , char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	//bind the socket to localhost port 8888
-	/*if (bind(socketFD, (struct sockaddr *)&stSockAddr, sizeof(stSockAddr))<0) {
-		perror("bind failed");
-		exit(EXIT_FAILURE);
-	}*/
-	//printf("Listener on port %d \n", PORT);
-
-	int res, c;
-	struct sockaddr_in stSockAddr;
 	memset(&stSockAddr, 0, sizeof(struct sockaddr_in));
 
 	stSockAddr.sin_family = AF_INET;
 	stSockAddr.sin_port = htons(serverPort);
-	res = inet_pton(AF_INET, serverIP, &stSockAddr.sin_addr);
+	int res = inet_pton(AF_INET, serverIP, &stSockAddr.sin_addr);
 
 	if (0 > res) {
 		perror("error: first parameter is not a valid address family");
 		close(socketFD);
 		exit(EXIT_FAILURE);
-	}
-	else if (0 == res) {
+	} else if (0 == res) {
 		perror("error: char string (invalid ip address)");
 		close(socketFD);
 		exit(EXIT_FAILURE);
@@ -142,91 +140,25 @@ int main(int argc , char *argv[])
 
 	printf("Connecting to %s:%d\n", serverIP, serverPort);
 
-	//send(socketFD, argv[3] , strlen(argv[3]) , 0);
-
-	//freopen("/dev/tty", "rw", stdin);
-	/*initscr();
-	raw();
-	start_color();
-	local_win = newwin(24, 80, 0, 0);
-	top_win = newwin(21, 80, 0, 0);
-	init_pair(1, COLOR_GREEN, COLOR_BLACK);
-	init_pair(2, COLOR_BLACK, COLOR_GREEN);
-	attron(COLOR_PAIR(1));
-	drawLogo();
-	attroff(COLOR_PAIR(1));*/
-	//getch(); //Press any key 2 advance
-	//drawGreen();
-
-	/*drawGreen();
-	attron(COLOR_PAIR(1)); //Black background for user writing.
-	mvprintw(21, 1, "                                                                              ");
-	mvprintw(22, 1, "                                                                              ");
-	attroff(COLOR_PAIR(1));
-	wrefresh(local_win);
-	//nodelay(stdscr,TRUE);
-	//keypad(stdscr, FALSE);
-	echo();
-	nocbreak();
-	//timeout(500);
-	move(21, 3);*/
-
-	//printf("odiafiosdihfaohisdf\n");
-
-	/*struct client cData;
-	strcpy(cData.nick, argv[3]);
-	cData.sockAddr = stSockAddr;
-	cData.next = NULL;*/
-
-	int activity, valread;
-	int max_sd;
-
-	char buffer[1025];  //data buffer of 1K
-	int flag = 0;
-	//set of socket descriptors
-	fd_set readfds;
-
 	//calculates max file descriptor
 	max_sd = (socketFD > STDIN) ? socketFD : STDIN;
 
 	initscr();
 	raw();
 	start_color();
-	local_win = newwin(24, 80, 0, 0);
-	top_win = newwin(21, 80, 0, 0);
 	init_pair(1, COLOR_GREEN, COLOR_BLACK);
 	init_pair(2, COLOR_BLACK, COLOR_GREEN);
-	attron(COLOR_PAIR(1));
 	drawLogo();
-	attroff(COLOR_PAIR(1));
-	system("/bin/stty raw"); //Kills buffering
+
+	system("/bin/stty raw"); 				//Kills buffering
 
 	while(1) {
-
-		//clear the socket set
-		FD_ZERO(&readfds);
-		
-		//add server socket to set
-		FD_SET(socketFD, &readfds);
+		FD_ZERO(&readfds);					//clear the socket set
+		FD_SET(socketFD, &readfds);			//add server socket to set
 		FD_SET(STDIN, &readfds);
 
-		
-		//getstr(nameTemp);
-		//endwin();
 		refresh();
-		//getstr(buffer);
-		//move(21, 3);
-		
-		//printf("I'm here");
-		//mvprintw(21, 3, "I'm here");
-		//fflush(stdout);
-		//fflush(stdin);
-		
-		//move(21, 3);
-		//getstr(buffer);
 		activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
-		//printw("Now I'm here");
-		//refresh();
 		
 		if ((activity < 0) && (errno!=EINTR)) {
 			printf("select error");
@@ -237,16 +169,10 @@ int main(int argc , char *argv[])
 			valread = read(socketFD, buffer, 1024);
 			buffer[valread] = '\0';
 			if (valread == 0) {
-				//sleep(100);
 				endwin();
 				exit(EXIT_SUCCESS);
 			} else {
-				//drawTopGreen();
-				//printBuffer(buffer);
-				//wrefresh(top_win);
-				//printf("%s\n", buffer);
 				if (strncmp(buffer, "Welcome!", 8) == 0) {
-					//printf("Holiiii\n");
 					break;
 				}
 				mvprintw(23, 8, buffer);
@@ -255,55 +181,29 @@ int main(int argc , char *argv[])
 		
 		//STDIN activity
 		if (FD_ISSET(STDIN, &readfds)) {
-			move(17, 10);
 			getstr(buffer);
 			send(socketFD, buffer , strlen(buffer), 0);
-			attron(COLOR_PAIR(1)); //Black background for user writing.
-			mvprintw(17, 0, "                                                                                                         ");
-			attroff(COLOR_PAIR(1));
 			refresh();
 		}
 	}
 
-	drawGreen();
-	attron(COLOR_PAIR(1)); //Black background for user writing.
-	mvprintw(21, 1, "                                                                              ");
-	mvprintw(22, 1, "                                                                              ");
-	attroff(COLOR_PAIR(1));
-	wrefresh(local_win);
-	//nodelay(stdscr,TRUE);
-	//keypad(stdscr, FALSE);
+	read_win = newwin(21, 80, 0, 0);
+	write_win = newwin(4, 80, 20, 0);
+	paintReadWindow();
+	paintWriteWindow();
+	wrefresh(read_win);
+	wrefresh(write_win);
 	echo();
 	nocbreak();
 	move(21, 3);
-	system("/bin/stty raw"); //Kills buffering
+	system("/bin/stty raw");
 
 	while(1) {
-
-		//clear the socket set
 		FD_ZERO(&readfds);
-		
-		//add server socket to set
 		FD_SET(socketFD, &readfds);
 		FD_SET(STDIN, &readfds);
-
-		
-		//getstr(nameTemp);
-		//endwin();
 		refresh();
-		//getstr(buffer);
-		//move(21, 3);
-		
-		//printf("I'm here");
-		//mvprintw(21, 3, "I'm here");
-		//fflush(stdout);
-		//fflush(stdin);
-		
-		//move(21, 3);
-		//getstr(buffer);
 		activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
-		//printw("Now I'm here");
-		//refresh();
 		
 		if ((activity < 0) && (errno!=EINTR)) {
 			printf("select error");
@@ -313,73 +213,26 @@ int main(int argc , char *argv[])
 		if (FD_ISSET(socketFD, &readfds)) {
 			valread = read(socketFD, buffer, 1024);
 			buffer[valread] = '\0';
-			//printf("Msg: %s\n----------------------\n", buffer);
 			if (valread == 0) {
 				endwin();
 				exit(EXIT_SUCCESS);
 			} else {
-				//printf("%s\n", buffer);
-				drawTopGreen();
+				paintReadWindow();
 				printBuffer(buffer);
-				wrefresh(top_win);
+				wrefresh(read_win);
 			}
 		}
 		
 		//STDIN activity
 		if (FD_ISSET(STDIN, &readfds)) {
-			//drawGreen();
-			//attron(COLOR_PAIR(1)); //Black background for user writing.
-			//mvprintw(21, 1, "                                                                              ");
-			//mvprintw(22, 1, "                                                                              ");
-			//attroff(COLOR_PAIR(1));
-			//wrefresh(local_win);
-
-			//move(21, 3 + flag);
-			/*c = getch();
-			buffer[flag] = c;
-			clearBottom();
-			flag++;
-			buffer[flag] = '\0';
-			mvprintw(21, 3, buffer);
-			if (c==3) {
-				printf("Exit [%d]\n", c);
-				system("/bin/stty cooked");
-				return 0;
-			}
-			if (c == 10) {
-				//printf("Sending to server...\n");
-				//buffer[flag] = '\0';
-				send(socketFD, buffer , flag , 0);
-				//strcpy(buffer, " ");
-				memset(buffer,0,sizeof(buffer));
-				flag = 0;
-				clearBottom();
-				refresh();
-			}*/
-
 			move(21, 3);
 			getstr(buffer);
 			send(socketFD, buffer , strlen(buffer), 0);
-			clearBottom();
+			paintWriteWindow();
 			refresh();
-			//printf("%u", c);
-			//fflush(stdout);
-			/*
-			valread = read(STDIN, buffer, 1024);
-			buffer[valread] = '\0';
-			send(socketFD, buffer , strlen(buffer) , 0);
-			clearBottom();
-			refresh();
-			mvprintw(21, 3, buffer);
-			fflush(stdout);
-
-			/*if (strncmp(buffer, "#quit", 5) == 0) {
-				exit(EXIT_SUCCESS);
-			}*/
 		}
 	}
 
-	//getch();
 	endwin();
 	exit(EXIT_FAILURE);
 }
