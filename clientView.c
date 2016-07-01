@@ -107,6 +107,9 @@ void scrollBuffer() {
 	pos = 16;
 }
 
+/**
+ * @brief      Initializes the main login UI.
+ */
 void initializeUI() {
 	initscr();
 	raw();
@@ -150,6 +153,14 @@ void printBuffer(char *msg) {
 	}
 }
 
+/**
+ * @brief      Initializes the socket connection to the server
+ *
+ * @param[in]  serverPort  The server port
+ * @param      serverIP    The server ip
+ *
+ * @return     the server socket file descriptor
+ */
 int initializeSocket(int serverPort, char *serverIP) {
 	int socketFD = socket(AF_INET, SOCK_STREAM, 0);
 	struct sockaddr_in stSockAddr;
@@ -187,6 +198,11 @@ int initializeSocket(int serverPort, char *serverIP) {
 	return socketFD;
 }
 
+/**
+ * @brief      Receives a server's message and shows it on the screen
+ *
+ * @param[in]  socketFD  The server socket fd
+ */
 void receiveMessage(int socketFD) {
 	char buffer[1025];
 	int valread;
@@ -203,6 +219,13 @@ void receiveMessage(int socketFD) {
 	}
 }
 
+/**
+ * @brief      Checks is the client is properlly logged receiving a "Welcome!" message from the server.
+ *
+ * @param[in]  socketFD  The server socket fd
+ *
+ * @return     1 if client is successfully logged
+ */
 int login(int socketFD) {
 	char buffer[1025];
 	int valread;
@@ -222,6 +245,11 @@ int login(int socketFD) {
 	return 0;
 }
 
+/**
+ * @brief      Handles the writing of the nickname in the login screen.
+ *
+ * @param[in]  socketFD  The server socket fd
+ */
 void writeNickname(int socketFD) {
 	char buffer[1025];
 	move(20,49);
@@ -230,6 +258,11 @@ void writeNickname(int socketFD) {
 	refresh();
 }
 
+/**
+ * @brief      Handles the message writing in the chat screen
+ *
+ * @param[in]  socketFD  The server socket fd
+ */
 void writeMessage(int socketFD) {
 	char buffer[1025];
 	mvprintw(21, 3, ">> ");
@@ -239,6 +272,9 @@ void writeMessage(int socketFD) {
 	refresh();
 }
 
+/**
+ * @brief      Shows the chat UI
+ */
 void openChatUI() {
 	read_win = newwin(21, 80, 0, 0);
 	write_win = newwin(4, 80, 20, 0);
@@ -252,6 +288,13 @@ void openChatUI() {
 	system("/bin/stty raw");
 }
 
+/**
+ * @brief      Waits until the client is logged with a valid nickname
+ *
+ * @param[in]  socketFD  The server socket fd
+ * @param[in]  max_sd    The maximum sd
+ * @param[in]  readfds   The readfds
+ */
 void waitLogin(int socketFD, int max_sd, fd_set readfds) {
 	int isLogged = 0;
 	int activity;
@@ -281,6 +324,13 @@ void waitLogin(int socketFD, int max_sd, fd_set readfds) {
 	}
 }
 
+/**
+ * @brief      Handles the chat messaging
+ *
+ * @param[in]  socketFD  The socket fd
+ * @param[in]  max_sd    The maximum sd
+ * @param[in]  readfds   The readfds
+ */
 void startChatting(int socketFD, int max_sd, fd_set readfds) {
 	int activity;
 
@@ -320,12 +370,10 @@ int main(int argc , char *argv[])
 	max_sd = (socketFD > STDIN) ? socketFD : STDIN;
 
 	initializeUI();
-
 	waitLogin(socketFD, max_sd, readfds);
 
-	//If everything is logged, then "open" the chat UI.
+	// After the user is logged, the chat UI is "open"
 	openChatUI();
-
 	startChatting(socketFD, max_sd, readfds);
 
 	endwin();
