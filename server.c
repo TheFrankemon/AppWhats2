@@ -1,13 +1,13 @@
 #include <stdio.h>
-#include <string.h>   //strlen, strncmp, strcpy
+#include <string.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <unistd.h>   //close
-#include <arpa/inet.h>    //close
+#include <unistd.h>
+#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
+#include <sys/time.h>
   
 #define TRUE   1
 #define FALSE  0
@@ -379,8 +379,8 @@ int cleanSocketFDSet(int master_socket, fd_set* readfds, client* connectedClient
  */
 int connectClient(int master_socket, client** list) {
     int new_socket;
-    int addrlen;
     struct sockaddr_in address;
+    int addrlen = sizeof(address);
 
     if ((new_socket = accept(master_socket, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
         perror("accept");
