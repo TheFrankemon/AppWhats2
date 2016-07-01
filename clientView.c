@@ -79,7 +79,7 @@ void paintReadWindow() {
 	wbkgd(read_win, COLOR_PAIR(2));
 	mvprintw(0, 14, "== AppWhats 2 TM - Just plain chatting, literally ==");
 	attroff(COLOR_PAIR(2));
-	move(21, 3);
+	mvprintw(21, 3, ">> ");
 }
 
 /**
@@ -94,7 +94,7 @@ void paintWriteWindow() {
 	mvprintw(21, 1, "                                                                              ");
 	mvprintw(22, 1, "                                                                              ");
 	attroff(COLOR_PAIR(1));
-	move(21, 3);
+	mvprintw(21, 3, ">> ");
 }
 
 /**
@@ -232,7 +232,7 @@ void writeNickname(int socketFD) {
 
 void writeMessage(int socketFD) {
 	char buffer[1025];
-	move(21, 3);
+	mvprintw(21, 3, ">> ");
 	getstr(buffer);
 	send(socketFD, buffer , strlen(buffer), 0);
 	paintWriteWindow();
@@ -283,6 +283,8 @@ void waitLogin(int socketFD, int max_sd, fd_set readfds) {
 
 void startChatting(int socketFD, int max_sd, fd_set readfds) {
 	int activity;
+
+	//Waits continously for the user's input messages to be sent to the server.
 	while(1) {
 		FD_ZERO(&readfds);
 		FD_SET(socketFD, &readfds);
